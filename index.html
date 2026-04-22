@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<meta name="theme-color" content="#060f1a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="TriFlow"/>
+<meta name="description" content="T&R Irrigation LLC Operations Platform"/>
+<link rel="manifest" href="/manifest.json"/>
+<title>TriFlow Serve — T&R Irrigation LLC</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;background:#060f1a}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+textarea:focus,input:focus,select:focus{outline:none}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useRef,useEffect}=React;
+
+// ─── CONFIG — REPLACE WITH YOUR API KEY ──────────────────────────────────────
+const API_KEY = "REPLACE_WITH_YOUR_API_KEY";
+
+// ─── BUSINESS DATA ────────────────────────────────────────────────────────────
+const TECHS={robert:{name:"Robert Pellicci",color:"#3b82f6"},thomas:{name:"Thomas Pellicci",color:"#10b981"}};
+const SERVICES=[
+  {id:"startup",name:"System Startup",rate:70,duration:60,parts:[]},
+  {id:"winter",name:"Winterization Blowout",rate:85,duration:45,parts:[]},
+  {id:"labor",name:"Service Call / Labor",rate:95,duration:60,parts:[]},
+  {id:"line1",name:'Repair 1" Line Break',rate:150,duration:90,parts:[{id:"linkit1",qty:1}]},
+  {id:"line34",name:'Repair 3/4" Line Break',rate:120,duration:75,parts:[{id:"linkit34",qty:1}]},
+  {id:"spray",name:'Replace 1/2" Spray Head',rate:45,duration:30,parts:[{id:"sprayhead",qty:1}]},
+  {id:"rotor",name:"Replace Rotor Head",rate:55,duration:30,parts:[{id:"rotorhead",qty:1}]},
+  {id:"valve",name:"Replace Solenoid Valve",rate:95,duration:45,parts:[{id:"solenoid",qty:1},{id:"wireconn",qty:2}]},
+  {id:"backflow",name:"Backflow Preventer Test",rate:75,duration:30,parts:[]},
+  {id:"controller",name:"Controller Replacement",rate:250,duration:60,parts:[{id:"battery9v",qty:2}]},
+  {id:"zone",name:"New Zone Install",rate:350,duration:120,parts:[]},
+  {id:"midseason",name:"Mid-Season Check-Up",rate:65,duration:45,parts:[]},
+];
+const INIT_INV=[
+  {id:"sprayhead",name:'1/2" Spray Head',qty:20,reorder:5},
+  {id:"rotorhead",name:"Rotor Head",qty:10,reorder:3},
+  {id:"linkit1",name:'1" Line Repair Kit',qty:8,reorder:2},
+  {id:"linkit34",name:'3/4" Line Repair Kit',qty:8,reorder:2},
+  {id:"solenoid",name:"Solenoid Valve 24V",qty:6,reorder:2},
+  {id:"wireconn",name:"Wire Connector",qty:50,reorder:15},
+  {id:"backflowprev",name:'Backflow Preventer 3/4"',qty:3,reorder:1},
+  {id:"battery9v",name:"Controller Battery 9V",qty:12,reorder:4},
+  {id:"teflontape",name:"Teflon Tape Roll",qty:10,reorder:3},
+  {id:"pvckit",name:"PVC Primer & Cement",qty:4,reorder:1},
+  {id:"elbow12",name:'Marlex Elbow 1/2"',qty:20,reorder:5},
+  {id:"tee12",name:'Marlex Tee 1/2"',qty:15,reorder:5},
+];
+const CLIENTS=[
+  {name:"Agnieszka Gruntha",address:"35 Gaymor Road",city:"Hauppauge",zip:"11788",phone:"",email:""},
+  {name:"Amanda Tooker",address:"15 River Ave",city:"Eastport",zip:"11941",phone:"",email:"amanda.k.tooker@gmail.com"},
+  {name:"Billy Stevens",address:"3 Wilderness Ct",city:"Manorville",zip:"11949",phone:"516-417-1515",email:""},
+  {name:"Brian O'Sullivan",address:"1 Tupelo St",city:"Manorville",zip:"11949",phone:"",email:""},
+  {name:"Brian Sullivan",address:"1 Tupelo St",city:"Manorville",zip:"11949",phone:"",email:""},
+  {name:"Damon Smith",address:"5 Wilderness Ct",city:"Manorville",zip:"11933",phone:"",email:""},
+  {name:"Dan O'Sullivan Sr.",address:"4 Halsey Manor Road",city:"Manorville",zip:"11949",phone:"631-339-3206",email:""},
+  {name:"Danny O'Sullivan",address:"252 Dayton Ave",city:"Manorville",zip:"11949",phone:"(631) 891-9136",email:"Daniel.osullivan15@yahoo.com"},
+  {name:"Dave",address:"85 Lewis Rd",city:"East Quogue",zip:"11942",phone:"",email:""},
+  {name:"Dave Spooner",address:"14 Ruth Lane",city:"Selden",zip:"11784",phone:"",email:""},
+  {name:"Diane",address:"9 Bedford Ct",city:"Ridge",zip:"11961",phone:"(631) 849-5597",email:""},
+  {name:"Edith",address:"71 Franklin",city:"Mastic",zip:"11950",phone:"",email:""},
+  {name:"Eric Giallorenzi",address:"23 Manorage Rd",city:"Manorville",zip:"11949",phone:"",email:""},
+  {name:"Eunice",address:"26 Franklin Ave",city:"Mastic",zip:"11950",phone:"",email:""},
+  {name:"Francis",address:"1251 Saxon Ave",city:"Bay Shore",zip:"11706",phone:"(631) 338-6201",email:""},
+  {name:"Frank",address:"20 Tern Court",city:"Bayshore",zip:"11706",phone:"",email:""},
+  {name:"Frank 2",address:"934 Manor Lane",city:"Bay Shore",zip:"11706",phone:"(516) 315-2867",email:""},
+  {name:"Frank Dowsenburg",address:"40 Florence Dr",city:"Manorville",zip:"11949",phone:"631-703-8947",email:""},
+  {name:"Gary Dubovick",address:"6 Halsey Manor",city:"Manorville",zip:"11949",phone:"(516) 600-0089",email:"dubovickgary@gmail.com"},
+  {name:"James",address:"4 Saybrook Ct",city:"Port Jefferson Station",zip:"11776",phone:"",email:""},
+  {name:"Jason Middleton",address:"1485 Sound Ave",city:"Calverton",zip:"11933",phone:"(573) 823-8431",email:""},
+  {name:"Jehovah's Witnesses Kingdom Hall",address:"4 Paul's Path",city:"Coram",zip:"11727",phone:"",email:""},
+  {name:"Joseph Garcia",address:"133 S Hickory St",city:"Port Jefferson Station",zip:"11776",phone:"(631) 710-1629",email:""},
+  {name:"Julie's Mom",address:"11 Crosby St",city:"Center Moriches",zip:"11934",phone:"(631) 721-8206",email:""},
+  {name:"Kim",address:"75 Woodland Rd",city:"Miller Place",zip:"11764",phone:"631-766-7615",email:"",balance:87.00},
+  {name:"Kurt McKinnon",address:"25 Halfcircle Dr",city:"Holbrook",zip:"11741",phone:"(631) 294-3777",email:""},
+  {name:"Lee Thumser",address:"127 Deer Run",city:"Wading River",zip:"11792",phone:"",email:""},
+  {name:"Lorri Kropp",address:"8 Mariposa Lane",city:"Manorville",zip:"11949",phone:"",email:"",balance:163.13},
+  {name:"Mary Ann Steinmeyer",address:"2 Saybrook Ct",city:"Port Jefferson Station",zip:"11776",phone:"(631) 235-6551",email:"tennismom11@hotmail.com"},
+  {name:"Max Fehr",address:"5 Nicole Ct",city:"Manorville",zip:"11949",phone:"",email:""},
+  {name:"Mike Andreassi",address:"6 Nicole Ct",city:"Manorville",zip:"11949",phone:"",email:""},
+  {name:"Mr O'Sullivan",address:"4 Halsey Manor Rd",city:"Manorville",zip:"11949",phone:"(516) 527-0971",email:""},
+  {name:"Nick",address:"75 Woodland Ave",city:"Miller Place",zip:"11764",phone:"",email:"nobrien44@gmail.com"},
+  {name:"Pat Kelleher",address:"80 Leonard St",city:"Wading River",zip:"11792",phone:"",email:""},
+  {name:"Phyllis Early",address:"8 Bedford Ct",city:"Ridge",zip:"11961",phone:"(631) 461-5903",email:"Southhamptonearly@gmail.com"},
+  {name:"Primi Restaurant - Zach",address:"999 Montauk Hwy",city:"West Islip",zip:"11795",phone:"(347) 453-6177",email:""},
+  {name:"Rich",address:"23 Estates Lane",city:"Shoreham",zip:"11786",phone:"(631) 332-4898",email:""},
+  {name:"Rolando",address:"4 Granada Circle",city:"Mount Sinai",zip:"11766",phone:"",email:"",balance:288.19,lastService:"04/16/2026",lastServiceDetail:"Startup + line break + spray head"},
+  {name:"Shelley Tooker",address:"27 Andy's Lane",city:"Eastport",zip:"11941",phone:"",email:""},
+  {name:"Stan Pappo",address:"8 Cottonwood Ave",city:"Port Jefferson",zip:"11776",phone:"",email:""},
+  {name:"Steve Quartuccio",address:"941 Thompson Dr",city:"Bay Shore",zip:"11706",phone:"(631) 741-3257",email:""},
+  {name:"Steve Rimoli",address:"17 Sarah Dr",city:"Hauppauge",zip:"11788",phone:"(631) 525-7823",email:""},
+  {name:"Thomas LTP",address:"10 Drew Drive",city:"Eastport",zip:"11941",phone:"",email:""},
+  {name:"Tom",address:"4 Wilderness Ct",city:"Manorville",zip:"11949",phone:"",email:""},
+  {name:"Tom Batsche",address:"43 Sams Path",city:"Rocky Point",zip:"11778",phone:"(631) 626-9788",email:""},
+  {name:"Tom Scott",address:"26 Gansett Ln",city:"Amagansett",zip:"11930",phone:"(631) 680-0604",email:""},
+  {name:"Warren Ellenwood",address:"7 Rolling Rd",city:"Miller Place",zip:"11764",phone:"",email:"Wellenwood@gmail.com"},
+  {name:"Will Smith",address:"140 Southfield Rd",city:"Calverton",zip:"11933",phone:"",email:""},
+  {name:"Zack",address:"19 La Salle Place",city:"Oakdale",zip:"11769",phone:"(347) 453-6177",email:""},
+];
+
+const TAX=0.0875;
+const cur=n=>`$${Number(n).toFixed(2)}`;
+const fmtD=d=>d.toISOString().split("T")[0];
+const today=new Date();
+const load=(k,fb)=>{try{const v=localStorage.getItem(`triflow_${k}`);return v?JSON.parse(v):fb;}catch{return fb;}};
+const save=(k,v)=>{try{localStorage.setItem(`triflow_${k}`,JSON.stringify(v));}catch{}};
+
+const seedJobs=()=>{
+  const pairs=[
+    ["Gary Dubovick","startup","robert","08:00"],
+    ["Dan O'Sullivan Sr.","startup","thomas","08:00"],
+    ["Brian O'Sullivan","startup","robert","10:00"],
+    ["Frank Dowsenburg","spray","thomas","10:30"],
+    ["Mike Andreassi","startup","robert","14:00"],
+    ["Rolando","midseason","thomas","14:00"],
+    ["Danny O'Sullivan","startup","robert","08:00"],
+    ["Max Fehr","startup","thomas","09:00"],
+    ["Tom","valve","robert","13:00"],
+    ["Lee Thumser","startup","thomas","13:00"],
+  ];
+  return pairs.map(([client,service,tech,time],i)=>{
+    const d=new Date(today);d.setDate(today.getDate()+Math.floor(i/2));
+    return{id:`j${i}`,client,service,tech,date:fmtD(d),time,status:i<2?"complete":"scheduled"};
+  });
+};
+
+const MODULES=[
+  {id:"calendar",label:"Calendar",icon:"📅",color:"#3b82f6",desc:"Schedule Robert & Thomas"},
+  {id:"invoice",label:"Invoice Builder",icon:"📋",color:"#10b981",desc:"Build & send invoices"},
+  {id:"inventory",label:"Inventory",icon:"📦",color:"#f59e0b",desc:"Parts & auto-reorder"},
+  {id:"sms",label:"SMS Campaigns",icon:"💬",color:"#8b5cf6",desc:"Seasonal client outreach"},
+  {id:"clients",label:"Clients",icon:"👤",color:"#06b6d4",desc:"49 Long Island clients"},
+  {id:"ai",label:"AI Assistant",icon:"🤖",color:"#ef4444",desc:"Diagnose, quote, design"},
+];
+
+const AI_SYSTEM=`You are the AI operations assistant for T&R Irrigation LLC, Rocky Point NY.
+Owners: Robert Pellicci and Thomas Pellicci — two-man operation, Long Island NY.
+49 active clients across Suffolk County. Tax rate: 8.75% NY.
+
+SERVICE PRICING:
+- System Startup: $70 base (up to 6 zones) + $10/zone beyond 6. ALWAYS ask zone count.
+- Winterization Blowout: $85 flat
+- Service Call / Labor: $95/hr
+- Repair 1" Line Break: $150
+- Repair 3/4" Line Break: $120
+- Replace 1/2" Spray Head: $45/head
+- Replace Rotor Head: $55/head
+- Rebuild Solenoid Valve: $95/valve
+- Backflow Preventer Test: $75
+- Controller Replacement: $250
+- New Zone Install: $350/zone
+- Mid-Season Check-Up: $65
+
+EXACT MATERIALS:
+1" Poly Line Break: 2x 1" barbed couplings, 4x SS pinch clamps, 12" 1" poly pipe. NO PVC cement or Teflon tape — poly pipe only.
+3/4" Poly Line Break: 2x 3/4" barbed couplings, 4x SS pinch clamps, 12" 3/4" poly pipe. NO PVC cement or Teflon tape.
+Spray Head: 1x K-Rain Pro-S Spray Head 4", 1x 1/2" nipple, 1x Hunter 0-360 nozzle.
+Rotor Head: 1x K-Rain RPS 75 Rotor 4", 1x 3/4" nipple.
+Solenoid Valve: 1x Irritrol 2400 Series valve (T&R rebuilds, not full replacement).
+Startup: NO parts in base price. Upsells: spray head $45, rotor $55, line break $120-150, controller $250.
+
+STARTUP ZONE PRICING: 6=$70, 7=$80, 8=$90, 10=$100, 12=$110.
+
+INSTALLATION MATERIALS (per zone system):
+Pipe: 1" poly $73-77/100ft, couplings $0.55-0.76, tees $1.11-1.79, 1" SS clamps $0.21
+Heads: K-Rain rotors $7-10, K-Rain spray $7-8
+Valves: 1" Irritrol solenoid $15-30/zone, valve boxes $25-80
+Controller: Hunter Pro-C 4-zone $99, WiFi $199, 9-zone module $100, 16-zone $300-350
+Backflow: 3/4" double check $233 (required on most installs)
+Wire: 18/13 wire $0.74-1.70/ft
+Copper plumbing: 3/4" copper pipe $45/10ft, ProPress fittings $4-31 each
+Misc: Ditch Witch rental $300-500/day
+
+INSTALLATION PRICING (from real T&R jobs):
+- 4-6 zones: $3,500-5,500 total
+- 7-9 zones: $3,500-6,000 total
+- 10-12+ zones: $7,000-10,000+
+Formula: (Parts x 1.08) + Labor + 15-35% profit + 8.75% tax
+
+HYDRAULIC DESIGN — ALWAYS FOLLOW THIS SEQUENCE:
+Step 0: Ask for address, lot size, static pressure (psi), meter size, GPM.
+When address given: generate Google Maps link → https://www.google.com/maps/search/?api=1&query=STREET+CITY+STATE+ZIP (replace spaces with +)
+Step 1: Working pressure = static psi x 0.75
+Step 2: Safe zone GPM = measured GPM x 0.75. Meter limits: 3/4"=10-12 GPM, 1"=15-18 GPM.
+Step 3: K-Rain RPS 75 Rotor = 2.0 GPM CONFIRMED T&R STANDARD. Spray = 1.5 GPM.
+Step 4: Max rotors/zone = safe GPM / 2.0 (round down). Max spray/zone = safe GPM / 1.5.
+Step 5: Total zones = (total rotors / rotors per zone) + (total spray / spray per zone). Add buffer zone.
+Coverage: 400 sq ft per rotor, 120 sq ft per spray head.
+Suffolk County lots: 1/4 acre=~6,500 sq ft irrigated, 1/3 acre=~9,000, 1/2 acre=~13,500.
+
+QUOTING RULES:
+1. Always list materials with the quote
+2. Always itemize line by line with subtotal + 8.75% tax + total
+3. Poly pipe repairs: NO PVC cement, NO Teflon tape
+4. Unknown scope: recommend $95 service call first
+5. Always show math on hydraulic designs
+
+FAULT DIAGNOSIS: List causes by probability, simplest first. Common LI issues: poly pipe freeze damage, mower head damage, solenoid surge failure, controller battery death, backflow freeze crack.
+
+SCHEDULING: Group clients by geography. Top clusters: Manorville, Bay Shore, Miller Place, Wading River, Port Jefferson Station. Spring startups April-May, winterization mid-Oct to early Nov.
+
+Be specific, practical, concise. Always show your work.`;
+
+function App(){
+  const [active,setActive]=useState("calendar");
+  const [jobs,setJobs]=useState(()=>load("jobs",seedJobs()));
+  const [inventory,setInventory]=useState(()=>load("inventory",INIT_INV));
+  const [calView,setCalView]=useState("week");
+  const [calDate,setCalDate]=useState(new Date());
+  const [showJobModal,setShowJobModal]=useState(false);
+  const [newJob,setNewJob]=useState({client:"",service:"startup",tech:"robert",date:fmtD(today),time:"09:00",notes:""});
+  const [avail,setAvail]=useState(()=>load("avail",{robert:{start:"08:00",end:"17:00",lunch:true},thomas:{start:"08:00",end:"17:00",lunch:true}}));
+  const [showAvailModal,setShowAvailModal]=useState(false);
+  const [editTech,setEditTech]=useState("robert");
+  const [invClient,setInvClient]=useState("");
+  const [invLines,setInvLines]=useState([]);
+  const [invSent,setInvSent]=useState(false);
+  const [cSearch,setCSearch]=useState("");
+  const [selClient,setSelClient]=useState(null);
+  const [sms,setSms]=useState({type:"startup",sending:false,sent:false,testSent:false,testSending:false,testPhone:"",testName:"Robert",msg:"Hi {name}, it's Robert & Thomas from T&R Irrigation! Spring startup season is here — booking April slots now. Reply YES or tap: [booking link] — (631) 494-2813. Reply STOP to opt out."});
+  const [aiChats,setAiChats]=useState([]);
+  const [aiInput,setAiInput]=useState("");
+  const [aiLoading,setAiLoading]=useState(false);
+  const chatEnd=useRef(null);
+
+  useEffect(()=>save("jobs",jobs),[jobs]);
+  useEffect(()=>save("inventory",inventory),[inventory]);
+  useEffect(()=>save("avail",avail),[avail]);
+  useEffect(()=>{chatEnd.current?.scrollIntoView({behavior:"smooth"});},[aiChats,aiLoading]);
+
+  const getWeekDates=d=>{const s=new Date(d);s.setDate(d.getDate()-d.getDay());return Array.from({length:7},(_,i)=>{const dd=new Date(s);dd.setDate(s.getDate()+i);return dd;});};
+  const weekDates=getWeekDates(calDate);
+  const jobsForDate=ds=>jobs.filter(j=>j.date===ds);
+  const jobsForTechDate=(tech,ds)=>jobs.filter(j=>j.tech===tech&&j.date===ds);
+
+  const addLine=svcId=>{
+    const svc=SERVICES.find(s=>s.id===svcId);if(!svc)return;
+    setInvLines(p=>[...p,{id:Date.now(),svcId,name:svc.name,qty:1,rate:svc.rate}]);
+    svc.parts.forEach(p=>setInventory(prev=>prev.map(i=>i.id===p.id?{...i,qty:Math.max(0,i.qty-p.qty)}:i)));
+  };
+  const subtotal=invLines.reduce((s,l)=>s+l.qty*l.rate,0);
+  const invTotal=subtotal+subtotal*TAX;
+  const invNum=`INV${String(Date.now()).slice(-5)}`;
+
+  const sendAI=async text=>{
+    const msg=text||aiInput.trim();if(!msg||aiLoading)return;
+    setAiInput("");setAiLoading(true);
+    const history=[...aiChats,{role:"user",content:msg}];
+    setAiChats(history);
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:AI_SYSTEM,messages:history.map(m=>({role:m.role,content:m.content}))}),
+      });
+      const data=await res.json();
+      setAiChats([...history,{role:"assistant",content:data.content?.[0]?.text||"No response."}]);
+    }catch{setAiChats([...history,{role:"assistant",content:"Connection error. Check your API key in the app settings."}]);}
+    setAiLoading(false);
+  };
+
+  const lowStock=inventory.filter(i=>i.qty<=i.reorder);
+  const clientsWithBal=CLIENTS.filter(c=>c.balance>0);
+  const filteredClients=CLIENTS.filter(c=>c.name.toLowerCase().includes(cSearch.toLowerCase())||c.city.toLowerCase().includes(cSearch.toLowerCase())||c.zip.includes(cSearch));
+  const mod=MODULES.find(m=>m.id===active);
+
+  const S={
+    root:{fontFamily:"'Barlow',sans-serif",background:"#060f1a",height:"100vh",color:"#e2e8f0",display:"flex",flexDirection:"column"},
+    hdr:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 18px",borderBottom:"1px solid #0c2040",background:"#07111f",flexWrap:"wrap",gap:8,flexShrink:0},
+    bName:{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:20,color:"#f1f5f9"},
+    bSub:{fontSize:10,color:"#334155",fontFamily:"'JetBrains Mono',monospace"},
+    pill:(bg,border,color)=>({padding:"3px 9px",background:bg,border:`1px solid ${border}`,borderRadius:20,fontSize:10,color,fontFamily:"'JetBrains Mono',monospace"}),
+    body:{display:"flex",flex:1,overflow:"hidden"},
+    sidebar:{width:196,flexShrink:0,borderRight:"1px solid #0c2040",padding:"10px 8px",display:"flex",flexDirection:"column",gap:2,overflowY:"auto",background:"#07111f"},
+    navBtn:(isActive,color)=>({display:"flex",alignItems:"flex-start",gap:8,padding:"8px 8px",borderRadius:7,border:"1px solid transparent",borderLeft:`3px solid ${isActive?color:"transparent"}`,background:isActive?"#0c1a2e":"transparent",cursor:"pointer",textAlign:"left",width:"100%"}),
+    main:{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"},
+    modBar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 18px",borderBottom:`2px solid ${mod.color}44`,flexShrink:0},
+    card:{background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:10,padding:"12px 14px"},
+    cardLbl:{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#1e3a5f",letterSpacing:"0.1em",marginBottom:10},
+    sel:{width:"100%",background:"#060f1a",border:"1px solid #1e3a5f",borderRadius:7,color:"#e2e8f0",padding:"8px 10px",fontSize:12,fontFamily:"'Barlow',sans-serif"},
+    scroll:{flex:1,overflowY:"auto"},
+    fLabel:{display:"block",fontSize:10,fontFamily:"'JetBrains Mono',monospace",color:"#334155",letterSpacing:"0.08em",marginBottom:5},
+    addBtn:{padding:"5px 14px",background:"#3b82f6",border:"none",borderRadius:6,color:"#fff",fontSize:12,cursor:"pointer",fontWeight:700,fontFamily:"'Barlow',sans-serif"},
+    modalOverlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100},
+    modal:{background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:14,padding:22,width:"min(460px,94vw)",maxHeight:"90vh",overflowY:"auto",animation:"slideIn 0.2s ease"},
+  };
+
+  return(
+    <div style={S.root}>
+      {/* HEADER */}
+      <div style={S.hdr}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+            <rect width="30" height="30" rx="7" fill="#0c2040"/>
+            <circle cx="15" cy="15" r="10" stroke="#3b82f6" strokeWidth="1.5" fill="none"/>
+            <path d="M15 7c0 0-5 5.5-5 9a5 5 0 0010 0C20 12.5 15 7 15 7z" fill="#3b82f6" opacity=".85"/>
+            <line x1="15" y1="10.5" x2="15" y2="19.5" stroke="#060f1a" strokeWidth="1.3" strokeLinecap="round"/>
+            <line x1="12" y1="15" x2="18" y2="15" stroke="#060f1a" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+          <div>
+            <div style={S.bName}>T&R Irrigation LLC</div>
+            <div style={S.bSub}>Rocky Point NY · Robert & Thomas Pellicci · (631) 494-2813</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          {lowStock.length>0&&<div style={S.pill("#3d1a00","#92400e","#f97316")}>⚠ {lowStock.length} low stock</div>}
+          {clientsWithBal.map(c=><div key={c.name} style={S.pill("#3d1a00","#92400e","#fbbf24")}>⚠ {c.name.split(" ")[0]}: ${c.balance}</div>)}
+          <div style={S.pill("#052e16","#166534","#4ade80")}>● Live</div>
+        </div>
+      </div>
+
+      <div style={S.body}>
+        {/* SIDEBAR */}
+        <div style={S.sidebar}>
+          {MODULES.map(m=>(
+            <button key={m.id} onClick={()=>setActive(m.id)} style={S.navBtn(active===m.id,m.color)}>
+              <span style={{fontSize:15}}>{m.icon}</span>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:active===m.id?"#e2e8f0":"#64748b",marginBottom:1}}>{m.label}</div>
+                <div style={{fontSize:9,color:"#334155",lineHeight:1.3}}>{m.desc}</div>
+              </div>
+            </button>
+          ))}
+          <div style={{height:1,background:"#0c2040",margin:"8px 4px"}}/>
+          <div style={{padding:"0 6px"}}>
+            <div style={{fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#1e3a5f",letterSpacing:"0.1em",marginBottom:8}}>TECHNICIANS</div>
+            {Object.entries(TECHS).map(([key,t])=>(
+              <div key={key} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 2px",marginBottom:4}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:t.color,flexShrink:0}}/>
+                <div>
+                  <div style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>{t.name.split(" ")[0]}</div>
+                  <div style={{fontSize:9,color:"#334155"}}>{avail[key].start}–{avail[key].end}</div>
+                </div>
+              </div>
+            ))}
+            <button onClick={()=>setShowAvailModal(true)} style={{padding:"5px 10px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#475569",fontSize:10,cursor:"pointer",width:"100%",marginTop:4,fontFamily:"'JetBrains Mono',monospace"}}>Edit Hours</button>
+          </div>
+        </div>
+
+        {/* MAIN */}
+        <div style={S.main}>
+          <div style={S.modBar}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:18}}>{mod.icon}</span>
+              <div>
+                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:17,color:mod.color,letterSpacing:"0.03em"}}>{mod.label}</div>
+                <div style={{fontSize:10,color:"#334155",marginTop:1}}>{mod.desc}</div>
+              </div>
+            </div>
+            {active==="calendar"&&<button onClick={()=>setShowJobModal(true)} style={S.addBtn}>+ Book Job</button>}
+          </div>
+
+          {/* CALENDAR */}
+          {active==="calendar"&&(
+            <div style={S.scroll}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 18px",borderBottom:"1px solid #0c2040",gap:10}}>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>{const d=new Date(calDate);d.setDate(d.getDate()-7);setCalDate(d);}} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:13,cursor:"pointer"}}>‹</button>
+                  <button onClick={()=>setCalDate(new Date())} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:13,cursor:"pointer"}}>Today</button>
+                  <button onClick={()=>{const d=new Date(calDate);d.setDate(d.getDate()+7);setCalDate(d);}} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:13,cursor:"pointer"}}>›</button>
+                </div>
+                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,color:"#e2e8f0"}}>{calDate.toLocaleDateString("en-US",{month:"long",year:"numeric"})}</div>
+                <div style={{display:"flex",gap:6}}>
+                  {["week","employee"].map(v=>(
+                    <button key={v} onClick={()=>setCalView(v)} style={{padding:"5px 12px",background:calView===v?"#1e3a5f":"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:6,color:calView===v?"#60a5fa":"#475569",fontSize:11,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace"}}>{v==="employee"?"By Tech":"Week"}</button>
+                  ))}
+                </div>
+              </div>
+              {calView==="week"&&(
+                <div style={{overflowX:"auto"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(110px,1fr))",minWidth:700}}>
+                    {weekDates.map((d,i)=>{
+                      const ds=fmtD(d),isToday=ds===fmtD(new Date());
+                      return(
+                        <div key={i} style={{borderRight:"1px solid #0c2040",minHeight:300,borderTop:isToday?"2px solid #3b82f6":"2px solid transparent"}}>
+                          <div style={{padding:"8px 8px 6px",borderBottom:"1px solid #0c2040",background:"#07111f",textAlign:"center"}}>
+                            <div style={{fontSize:10,color:isToday?"#3b82f6":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{d.toLocaleDateString("en-US",{weekday:"short"})}</div>
+                            <div style={{fontSize:18,fontWeight:700,color:isToday?"#3b82f6":"#94a3b8",fontFamily:"'Barlow Condensed',sans-serif"}}>{d.getDate()}</div>
+                          </div>
+                          <div style={{padding:"6px 5px",display:"flex",flexDirection:"column",gap:4}}>
+                            {jobsForDate(ds).map(job=>{
+                              const svc=SERVICES.find(s=>s.id===job.service),tech=TECHS[job.tech];
+                              return(
+                                <div key={job.id} style={{padding:"5px 7px",borderRadius:7,borderLeft:`3px solid ${tech.color}`,background:job.status==="complete"?"#0d1f0d":"#0c1a2e"}}>
+                                  <div style={{fontSize:9,color:"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{job.time}</div>
+                                  <div style={{fontSize:11,fontWeight:600,color:job.status==="complete"?"#4ade80":"#e2e8f0",lineHeight:1.2}}>{job.client}</div>
+                                  <div style={{fontSize:10,color:"#475569"}}>{svc?.name}</div>
+                                  <div style={{fontSize:9,color:tech.color,marginTop:1}}>{tech.name.split(" ")[0]}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {calView==="employee"&&(
+                <div style={{overflowX:"auto"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"70px 1fr 1fr",minWidth:480}}>
+                    <div style={{background:"#07111f",borderRight:"1px solid #0c2040",borderBottom:"1px solid #0c2040"}}/>
+                    {Object.entries(TECHS).map(([key,t])=>(
+                      <div key={key} style={{padding:"10px 12px",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid #0c2040",background:"#07111f",borderLeft:`3px solid ${t.color}`}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:t.color}}/>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{t.name}</div>
+                          <div style={{fontSize:10,color:"#475569"}}>{avail[key].start} – {avail[key].end}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {weekDates.map((d,i)=>{
+                      const ds=fmtD(d),isToday=ds===fmtD(new Date());
+                      return[
+                        <div key={`l${i}`} style={{padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #0c2040",borderRight:"1px solid #0c2040",background:"#07111f"}}>
+                          <div style={{fontSize:9,color:isToday?"#3b82f6":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{d.toLocaleDateString("en-US",{weekday:"short"})}</div>
+                          <div style={{fontSize:16,fontWeight:700,color:isToday?"#3b82f6":"#64748b",fontFamily:"'Barlow Condensed',sans-serif"}}>{d.getDate()}</div>
+                        </div>,
+                        ...Object.keys(TECHS).map(tk=>(
+                          <div key={`${tk}${i}`} style={{padding:"6px 8px",borderBottom:"1px solid #0c2040",borderLeft:"1px solid #0c2040",minHeight:70,display:"flex",flexDirection:"column",gap:4}}>
+                            {jobsForTechDate(tk,ds).map(job=>{
+                              const svc=SERVICES.find(s=>s.id===job.service);
+                              return(
+                                <div key={job.id} style={{padding:"4px 8px",borderRadius:6,background:job.status==="complete"?"#0d1f0d":"#0c2040",border:`1px solid ${TECHS[tk].color}33`,display:"flex",flexDirection:"column",gap:1}}>
+                                  <span style={{fontSize:9,color:TECHS[tk].color,fontFamily:"'JetBrains Mono',monospace"}}>{job.time}</span>
+                                  <span style={{fontSize:11,color:"#e2e8f0",fontWeight:600}}>{job.client}</span>
+                                  <span style={{fontSize:10,color:"#475569"}}>{svc?.name}</span>
+                                </div>
+                              );
+                            })}
+                            {jobsForTechDate(tk,ds).length===0&&<div style={{fontSize:10,color:"#1e3a5f",padding:"6px 4px"}}>Available</div>}
+                          </div>
+                        ))
+                      ];
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* INVOICE */}
+          {active==="invoice"&&(
+            <div style={S.scroll}>
+              {!invSent?(
+                <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:14,padding:"14px 18px"}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    <div style={S.card}>
+                      <div style={S.cardLbl}>CLIENT</div>
+                      <select value={invClient} onChange={e=>setInvClient(e.target.value)} style={S.sel}>
+                        <option value="">Select client...</option>
+                        {CLIENTS.map(c=><option key={c.name} value={c.name}>{c.name} — {c.city}</option>)}
+                      </select>
+                    </div>
+                    <div style={S.card}>
+                      <div style={S.cardLbl}>ADD SERVICES</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                        {SERVICES.map(svc=>(
+                          <button key={svc.id} onClick={()=>addLine(svc.id)} style={{padding:"8px 10px",background:"#060f1a",border:"1px solid #1e3a5f",borderRadius:8,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:2}}>
+                            <span style={{fontSize:12,fontWeight:600,color:"#e2e8f0"}}>{svc.name}</span>
+                            <span style={{fontSize:11,color:"#10b981",fontFamily:"'JetBrains Mono',monospace"}}>{cur(svc.rate)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {invLines.length>0&&(
+                      <div style={S.card}>
+                        <div style={S.cardLbl}>LINE ITEMS</div>
+                        {invLines.map(line=>(
+                          <div key={line.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid #0c2040"}}>
+                            <span style={{flex:1,fontSize:13,color:"#e2e8f0"}}>{line.name}</span>
+                            <button onClick={()=>setInvLines(p=>p.map(l=>l.id===line.id?{...l,qty:Math.max(1,l.qty-1)}:l))} style={{width:24,height:24,background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:5,color:"#94a3b8",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+                            <span style={{fontSize:13,color:"#94a3b8",minWidth:16,textAlign:"center"}}>{line.qty}</span>
+                            <button onClick={()=>setInvLines(p=>p.map(l=>l.id===line.id?{...l,qty:l.qty+1}:l))} style={{width:24,height:24,background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:5,color:"#94a3b8",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+                            <span style={{fontSize:13,color:"#10b981",fontFamily:"'JetBrains Mono',monospace",minWidth:60,textAlign:"right"}}>{cur(line.qty*line.rate)}</span>
+                            <button onClick={()=>setInvLines(p=>p.filter(l=>l.id!==line.id))} style={{width:24,height:24,background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:5,color:"#ef4444",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    <div style={{...S.card,flex:1}}>
+                      <div style={S.cardLbl}>INVOICE PREVIEW</div>
+                      <div style={{paddingBottom:10,marginBottom:10,borderBottom:"1px solid #0c2040"}}>
+                        <div style={{fontSize:15,fontWeight:700,color:"#3b82f6",fontFamily:"'Barlow Condensed',sans-serif"}}>T&R Irrigation LLC</div>
+                        <div style={{fontSize:10,color:"#475569"}}>678 Route 25A, Rocky Point NY 11778</div>
+                        <div style={{fontSize:10,color:"#475569"}}>(631) 494-2813</div>
+                        <div style={{marginTop:8}}>
+                          <div style={{fontSize:10,color:"#334155"}}>Invoice #: {invNum}</div>
+                          <div style={{fontSize:10,color:"#334155"}}>Date: {new Date().toLocaleDateString()}</div>
+                          <div style={{fontSize:10,color:"#334155"}}>Due: {new Date(Date.now()+30*86400000).toLocaleDateString()}</div>
+                        </div>
+                      </div>
+                      {invClient&&<div style={{fontSize:12,color:"#64748b",marginBottom:8}}>Bill to: <strong style={{color:"#e2e8f0"}}>{invClient}</strong></div>}
+                      {invLines.map(l=>(
+                        <div key={l.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid #0c2040"}}>
+                          <span style={{color:"#94a3b8"}}>{l.name} × {l.qty}</span>
+                          <span style={{color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{cur(l.qty*l.rate)}</span>
+                        </div>
+                      ))}
+                      {invLines.length>0&&(
+                        <div style={{marginTop:10}}>
+                          {[["Subtotal",cur(subtotal)],["Tax 8.75%",cur(subtotal*TAX)]].map(([k,v])=>(
+                            <div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#475569",marginBottom:3}}>
+                              <span>{k}</span><span style={{fontFamily:"'JetBrains Mono',monospace"}}>{v}</span>
+                            </div>
+                          ))}
+                          <div style={{display:"flex",justifyContent:"space-between",fontSize:14,fontWeight:700,color:"#10b981",borderTop:"1px solid #1e3a5f",paddingTop:6,marginTop:4}}>
+                            <span>Total</span><span style={{fontFamily:"'JetBrains Mono',monospace"}}>{cur(invTotal)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {[["📨 Send via SMS","#10b981"],["📧 Send via Email","#3b82f6"]].map(([label,bg])=>(
+                      <button key={label} onClick={()=>{if(invClient&&invLines.length)setInvSent(true);}} disabled={!invClient||!invLines.length}
+                        style={{padding:"11px 0",border:"none",borderRadius:9,color:"#fff",fontSize:13,fontWeight:700,fontFamily:"'Barlow',sans-serif",background:(!invClient||!invLines.length)?"#1e293b":bg,cursor:(!invClient||!invLines.length)?"not-allowed":"pointer"}}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,gap:14,padding:40}}>
+                  <div style={{fontSize:48}}>✅</div>
+                  <div style={{fontSize:20,fontWeight:700,color:"#10b981",fontFamily:"'Barlow Condensed',sans-serif"}}>Invoice Sent!</div>
+                  <div style={{fontSize:13,color:"#64748b",textAlign:"center"}}>{invClient} received invoice {invNum} for {cur(invTotal)}<br/>Pay Now link delivered · QuickBooks updated · Inventory adjusted</div>
+                  <button onClick={()=>{setInvLines([]);setInvClient("");setInvSent(false);}} style={S.addBtn}>+ New Invoice</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* INVENTORY */}
+          {active==="inventory"&&(
+            <div style={S.scroll}>
+              <div style={{padding:"14px 18px",display:"flex",flexDirection:"column",gap:10}}>
+                {lowStock.length>0&&(
+                  <div style={{background:"#3d1a00",border:"1px solid #92400e",borderRadius:10,padding:"10px 14px"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#fbbf24",marginBottom:6}}>⚠ LOW STOCK — {lowStock.length} item(s) need reordering</div>
+                    {lowStock.map(i=><div key={i.id} style={{fontSize:12,color:"#f97316",marginBottom:2}}>• {i.name}: {i.qty} left (reorder at {i.reorder})</div>)}
+                  </div>
+                )}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>
+                  {inventory.map(item=>{
+                    const isLow=item.qty<=item.reorder,pct=Math.min(100,(item.qty/Math.max(item.reorder*4,1))*100);
+                    return(
+                      <div key={item.id} style={{background:"#0c1a2e",border:`1px solid ${isLow?"#92400e":"#0c2040"}`,borderRadius:10,padding:"12px 14px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                          <div style={{fontSize:12,fontWeight:600,color:"#e2e8f0",flex:1,lineHeight:1.3}}>{item.name}</div>
+                          {isLow&&<div style={{fontSize:9,color:"#fbbf24",background:"#3d1a00",padding:"2px 6px",borderRadius:8,marginLeft:6}}>LOW</div>}
+                        </div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                          <span style={{fontSize:13,color:isLow?"#f97316":"#10b981",fontFamily:"'JetBrains Mono',monospace",fontWeight:700}}>{item.qty} units</span>
+                          <span style={{fontSize:10,color:"#334155"}}>Min: {item.reorder}</span>
+                        </div>
+                        <div style={{height:4,background:"#0c2040",borderRadius:2,marginBottom:8}}>
+                          <div style={{height:4,width:`${pct}%`,background:isLow?"#f97316":"#10b981",borderRadius:2}}/>
+                        </div>
+                        <div style={{display:"flex",gap:5}}>
+                          <button onClick={()=>setInventory(p=>p.map(i=>i.id===item.id?{...i,qty:Math.max(0,i.qty-1)}:i))} style={{flex:1,padding:"5px 0",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#ef4444",cursor:"pointer",fontSize:12,fontFamily:"'JetBrains Mono',monospace"}}>−1</button>
+                          <button onClick={()=>setInventory(p=>p.map(i=>i.id===item.id?{...i,qty:i.qty+1}:i))} style={{flex:1,padding:"5px 0",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#64748b",cursor:"pointer",fontSize:12,fontFamily:"'JetBrains Mono',monospace"}}>+1</button>
+                          <button onClick={()=>setInventory(p=>p.map(i=>i.id===item.id?{...i,qty:i.reorder*4}:i))} style={{flex:2,padding:"5px 0",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#fbbf24",cursor:"pointer",fontSize:12,fontFamily:"'JetBrains Mono',monospace"}}>Restock</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SMS */}
+          {active==="sms"&&(
+            <div style={S.scroll}>
+              <div style={{padding:"14px 18px",display:"grid",gridTemplateColumns:"1fr 280px",gap:14,alignItems:"start"}}>
+                <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                  <div style={S.card}>
+                    <div style={S.cardLbl}>CAMPAIGN TYPE</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                      {[
+                        {key:"startup",label:"🌱 Spring Startup",msg:"Hi {name}, it's Robert & Thomas from T&R Irrigation! Spring startup season is here — booking April slots now. Reply YES or tap: [booking link] — (631) 494-2813. Reply STOP to opt out."},
+                        {key:"winter",label:"❄️ Winterization",msg:"Hi {name}, T&R Irrigation here! Time to schedule your winterization blowout before the first freeze. Reply BOOK or call (631) 494-2813. Reply STOP to opt out."},
+                        {key:"midseason",label:"🔧 Mid-Season",msg:"Hi {name}, Robert & Thomas from T&R Irrigation. Mid-season check-ups available for $65. Reply CHECK to schedule. Reply STOP to opt out."},
+                      ].map(c=>(
+                        <button key={c.key} onClick={()=>setSms(p=>({...p,type:c.key,msg:c.msg,sent:false,testSent:false}))}
+                          style={{padding:"10px 8px",background:sms.type===c.key?"#1e3a5f":"#0c1a2e",border:`1px solid ${sms.type===c.key?"#3b82f6":"#1e3a5f"}`,borderRadius:8,color:sms.type===c.key?"#60a5fa":"#64748b",cursor:"pointer",fontSize:12,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={S.card}>
+                    <div style={S.cardLbl}>MESSAGE</div>
+                    <textarea value={sms.msg} onChange={e=>setSms(p=>({...p,msg:e.target.value,testSent:false}))} rows={4}
+                      style={{width:"100%",background:"#060f1a",border:"1px solid #1e3a5f",borderRadius:8,color:"#e2e8f0",padding:"10px 12px",fontSize:12,fontFamily:"'JetBrains Mono',monospace",resize:"vertical",lineHeight:1.6}}/>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:5}}>
+                      <span style={{fontSize:10,color:"#334155"}}>{sms.msg.length} chars</span>
+                      <span style={{fontSize:10,color:sms.msg.length>160?"#f97316":"#334155"}}>{sms.msg.length>160?`⚠ ${Math.ceil(sms.msg.length/160)} segments`:"✓ 1 segment"}</span>
+                    </div>
+                  </div>
+                  <div style={{background:"#0c1a2e",border:"2px solid #f59e0b",borderRadius:10,padding:14}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:"#f59e0b"}}/>
+                      <span style={{fontSize:12,fontWeight:700,color:"#f59e0b",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:"0.05em"}}>TEST MODE</span>
+                      <span style={{fontSize:10,color:"#475569",marginLeft:4}}>Send to yourself first</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                      <div><label style={S.fLabel}>YOUR PHONE</label><input value={sms.testPhone} onChange={e=>setSms(p=>({...p,testPhone:e.target.value,testSent:false}))} placeholder="(631) 494-2813" style={S.sel}/></div>
+                      <div><label style={S.fLabel}>PREVIEW AS</label><input value={sms.testName} onChange={e=>setSms(p=>({...p,testName:e.target.value,testSent:false}))} placeholder="Robert" style={S.sel}/></div>
+                    </div>
+                    <div style={{background:"#060f1a",border:"1px solid #1e3a5f",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+                      <div style={{fontSize:9,color:"#475569",fontFamily:"'JetBrains Mono',monospace",marginBottom:5}}>PREVIEW as {sms.testName||"Robert"}:</div>
+                      <div style={{fontSize:12,color:"#e2e8f0",lineHeight:1.6,fontFamily:"'JetBrains Mono',monospace",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{sms.msg.replace(/\{name\}/g,sms.testName||"Robert")}</div>
+                    </div>
+                    {!sms.testSent?(
+                      <button onClick={()=>{if(!sms.testPhone)return;setSms(p=>({...p,testSending:true}));setTimeout(()=>setSms(p=>({...p,testSending:false,testSent:true})),1500);}}
+                        disabled={!sms.testPhone||sms.testSending}
+                        style={{width:"100%",padding:"10px 0",border:"none",borderRadius:8,fontSize:13,fontWeight:700,fontFamily:"'Barlow',sans-serif",color:"#fff",background:sms.testSending?"#334155":!sms.testPhone?"#1e293b":"#f59e0b",cursor:!sms.testPhone||sms.testSending?"not-allowed":"pointer"}}>
+                        {sms.testSending?"Sending test...":`📱 Send Test to ${sms.testPhone||"your number"}`}
+                      </button>
+                    ):(
+                      <div style={{background:"#1c1400",border:"1px solid #b45309",borderRadius:8,padding:"10px 12px"}}>
+                        <div style={{fontSize:12,color:"#fbbf24",fontWeight:700,marginBottom:3}}>✓ Test sent to {sms.testPhone}</div>
+                        <div style={{fontSize:11,color:"#78716c"}}>Check your phone. Happy with it?</div>
+                        <div style={{display:"flex",gap:8,marginTop:8}}>
+                          <button onClick={()=>setSms(p=>({...p,testSent:false}))} style={{flex:1,padding:"6px 0",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",cursor:"pointer",fontSize:11,fontFamily:"'Barlow',sans-serif"}}>Edit</button>
+                          <button onClick={()=>{setSms(p=>({...p,sending:true}));setTimeout(()=>setSms(p=>({...p,sending:false,sent:true})),2000);}}
+                            style={{flex:2,padding:"6px 0",background:"#8b5cf6",border:"none",borderRadius:6,color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Barlow',sans-serif"}}>
+                            ✓ Send to All {CLIENTS.length} Clients
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {sms.sent&&(
+                    <div style={{background:"#0d1f0d",border:"1px solid #166534",borderRadius:10,padding:16,textAlign:"center"}}>
+                      <div style={{fontSize:24,marginBottom:6}}>✅</div>
+                      <div style={{fontSize:15,fontWeight:700,color:"#4ade80",fontFamily:"'Barlow Condensed',sans-serif"}}>Campaign Sent!</div>
+                      <div style={{fontSize:12,color:"#64748b",marginTop:4}}>{CLIENTS.length} clients reached</div>
+                      <button onClick={()=>setSms(p=>({...p,sent:false,testSent:false}))} style={{marginTop:10,padding:"5px 14px",background:"transparent",border:"1px solid #166534",borderRadius:6,color:"#4ade80",cursor:"pointer",fontSize:11,fontFamily:"'JetBrains Mono',monospace"}}>New Campaign</button>
+                    </div>
+                  )}
+                </div>
+                <div style={S.card}>
+                  <div style={S.cardLbl}>RECIPIENTS — {CLIENTS.length} CLIENTS</div>
+                  <div style={{maxHeight:500,overflowY:"auto",display:"flex",flexDirection:"column",gap:3}}>
+                    {CLIENTS.map(c=>(
+                      <div key={c.name} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 8px",background:"#060f1a",borderRadius:5}}>
+                        <div style={{width:6,height:6,borderRadius:"50%",background:c.phone||c.email?"#10b981":"#1e3a5f",flexShrink:0}}/>
+                        <span style={{fontSize:11,color:"#94a3b8",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
+                        {c.phone&&<span style={{fontSize:9,color:"#10b981"}}>📱</span>}
+                        {c.email&&<span style={{fontSize:9,color:"#3b82f6"}}>✉</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CLIENTS */}
+          {active==="clients"&&(
+            <div style={{...S.scroll,padding:"14px 18px",display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:9,background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:8,padding:"9px 13px",flexShrink:0}}>
+                <span>🔍</span>
+                <input value={cSearch} onChange={e=>setCSearch(e.target.value)} placeholder="Search name, city, or zip..." style={{flex:1,background:"transparent",border:"none",color:"#e2e8f0",fontSize:13,fontFamily:"'Barlow',sans-serif"}}/>
+                <span style={{fontSize:10,color:"#334155",fontFamily:"'JetBrains Mono',monospace"}}>{filteredClients.length}</span>
+              </div>
+              <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:5}}>
+                {filteredClients.map((c,i)=>(
+                  <div key={i} onClick={()=>setSelClient(selClient?.name===c.name?null:c)}
+                    style={{display:"flex",alignItems:"center",gap:11,padding:"9px 13px",background:"#0c1a2e",borderRadius:9,border:`1px solid ${selClient?.name===c.name?"#3b82f6":"#0c2040"}`,cursor:"pointer"}}>
+                    <div style={{width:34,height:34,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"#60a5fa",background:c.balance?"#3d1a00":"#0c2040",flexShrink:0}}>{c.name[0]}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:"#e2e8f0"}}>{c.name}</div>
+                      <div style={{fontSize:11,color:"#334155"}}>{c.address}, {c.city} {c.zip}</div>
+                      {c.phone&&<div style={{fontSize:10,color:"#1e3a5f",fontFamily:"'JetBrains Mono',monospace"}}>{c.phone}</div>}
+                      {c.lastService&&<div style={{fontSize:10,color:"#166534"}}>Last: {c.lastService}</div>}
+                    </div>
+                    {c.balance>0&&<div style={{padding:"2px 7px",background:"#3d1a00",borderRadius:10,fontSize:10,color:"#fbbf24",fontFamily:"'JetBrains Mono',monospace"}}>${c.balance}</div>}
+                  </div>
+                ))}
+              </div>
+              {selClient&&(
+                <div style={{background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:10,padding:14,flexShrink:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                    <strong style={{color:"#e2e8f0",fontSize:14}}>{selClient.name}</strong>
+                    <button onClick={()=>setSelClient(null)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:16}}>✕</button>
+                  </div>
+                  {[["Address",`${selClient.address}, ${selClient.city} NY ${selClient.zip}`],selClient.phone&&["Phone",selClient.phone],selClient.email&&["Email",selClient.email],selClient.balance&&["Balance",`$${selClient.balance} owed`],selClient.lastService&&["Last Visit",`${selClient.lastService} — ${selClient.lastServiceDetail}`]].filter(Boolean).map(([l,v])=>(
+                    <div key={l} style={{display:"flex",gap:10,marginBottom:6,fontSize:12}}>
+                      <span style={{color:"#334155",width:60,flexShrink:0,fontFamily:"'JetBrains Mono',monospace",fontSize:10,paddingTop:1}}>{l}</span>
+                      <span style={{color:l==="Balance"?"#fbbf24":"#94a3b8"}}>{v}</span>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",gap:8,marginTop:10}}>
+                    <button onClick={()=>{setNewJob(p=>({...p,client:selClient.name}));setShowJobModal(true);setActive("calendar");}} style={{flex:1,padding:"8px 0",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:7,color:"#60a5fa",cursor:"pointer",fontSize:12,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>📅 Book Job</button>
+                    <button onClick={()=>{setInvClient(selClient.name);setActive("invoice");setSelClient(null);}} style={{flex:1,padding:"8px 0",background:"#0c2040",border:"1px solid #166534",borderRadius:7,color:"#4ade80",cursor:"pointer",fontSize:12,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>📋 Invoice</button>
+                    {selClient.balance>0&&<button onClick={()=>{sendAI(`Draft a polite follow-up to ${selClient.name} about their $${selClient.balance} balance`);setActive("ai");setSelClient(null);}} style={{flex:1,padding:"8px 0",background:"#3d1a00",border:"1px solid #92400e",borderRadius:7,color:"#fbbf24",cursor:"pointer",fontSize:12,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>⚠ Follow Up</button>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* AI */}
+          {active==="ai"&&(
+            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              <div style={{flex:1,overflowY:"auto",padding:18,display:"flex",flexDirection:"column",gap:13}}>
+                {aiChats.length===0&&(
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"30px 20px",gap:10}}>
+                    <div style={{fontSize:34}}>🤖</div>
+                    <div style={{fontSize:16,fontWeight:700,color:"#ef4444",fontFamily:"'Barlow Condensed',sans-serif"}}>T&R AI Assistant</div>
+                    <div style={{fontSize:12,color:"#334155",textAlign:"center"}}>Real pricing, 49 clients & hydraulic design loaded</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginTop:8,maxWidth:540}}>
+                      {["Diagnose: one zone won't turn on","Quote startup for Danny O'Sullivan — 8 zones","Design system: new client in Manorville","Route Manorville clients for Monday","Winterization checklist for Long Island","1\" line break — what materials do I need?"].map((q,i)=>(
+                        <button key={i} onClick={()=>sendAI(q)} style={{padding:"9px 13px",background:"#0c1a2e",border:"1px solid #0c2040",borderRadius:7,color:"#475569",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"'Barlow',sans-serif",lineHeight:1.4}}>{q}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {aiChats.map((m,i)=>(
+                  <div key={i} style={{display:"flex",gap:9,alignItems:"flex-end",justifyContent:m.role==="user"?"flex-end":"flex-start",animation:"fadeUp 0.18s ease"}}>
+                    {m.role==="assistant"&&<div style={{width:30,height:30,borderRadius:6,background:"#0c2040",border:"1px solid #1e3a5f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,color:"#60a5fa",flexShrink:0}}>T&R</div>}
+                    <div style={{maxWidth:"76%",padding:"10px 14px",borderRadius:11,...(m.role==="user"?{background:"#ef4444",color:"#fff",borderBottomRightRadius:3}:{background:"#0c1a2e",border:"1px solid #1e3a5f",borderBottomLeftRadius:3,color:"#94a3b8"})}}>
+                      <pre style={{fontSize:13,fontFamily:"'JetBrains Mono',monospace",whiteSpace:"pre-wrap",wordBreak:"break-word",lineHeight:1.7}}>{m.content}</pre>
+                    </div>
+                    {m.role==="user"&&<div style={{width:30,height:30,borderRadius:6,background:"#0c1a2e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontFamily:"'JetBrains Mono',monospace",color:"#334155",flexShrink:0}}>YOU</div>}
+                  </div>
+                ))}
+                {aiLoading&&(
+                  <div style={{display:"flex",gap:9,alignItems:"flex-end"}}>
+                    <div style={{width:30,height:30,borderRadius:6,background:"#0c2040",border:"1px solid #1e3a5f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,color:"#60a5fa",flexShrink:0}}>T&R</div>
+                    <div style={{padding:"10px 14px",borderRadius:11,background:"#0c1a2e",border:"1px solid #1e3a5f"}}>
+                      <div style={{display:"flex",gap:5}}>{[0,1,2].map(n=><div key={n} style={{width:7,height:7,borderRadius:"50%",background:"#ef4444",animation:`pulse 1.2s ${n*0.2}s infinite`}}/>)}</div>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEnd}/>
+              </div>
+              <div style={{display:"flex",gap:8,padding:"12px 18px",borderTop:"1px solid #0c2040"}}>
+                <textarea value={aiInput} onChange={e=>setAiInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAI();}}} placeholder="Ask about diagnosis, quoting, system design, routing..." rows={2}
+                  style={{flex:1,background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:9,color:"#e2e8f0",padding:"10px 13px",fontSize:13,fontFamily:"'Barlow',sans-serif",resize:"none",lineHeight:1.5}}/>
+                <button onClick={()=>sendAI()} disabled={aiLoading||!aiInput.trim()}
+                  style={{width:42,borderRadius:9,border:"none",color:"#fff",fontSize:19,background:aiLoading||!aiInput.trim()?"#1e293b":"#ef4444",cursor:aiLoading||!aiInput.trim()?"not-allowed":"pointer"}}>↑</button>
+              </div>
+              <div style={{fontSize:10,color:"#0c2040",textAlign:"center",padding:"3px 0 7px",fontFamily:"'JetBrains Mono',monospace"}}>Enter to send · Shift+Enter for new line</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* BOOK JOB MODAL */}
+      {showJobModal&&(
+        <div style={S.modalOverlay} onClick={()=>setShowJobModal(false)}>
+          <div style={S.modal} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
+              <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:"'Barlow Condensed',sans-serif"}}>Book New Job</div>
+              <button onClick={()=>setShowJobModal(false)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:18}}>✕</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {[["Client",<select value={newJob.client} onChange={e=>setNewJob(p=>({...p,client:e.target.value}))} style={S.sel}><option value="">Select client...</option>{CLIENTS.map(c=><option key={c.name} value={c.name}>{c.name} — {c.city}</option>)}</select>],["Service",<select value={newJob.service} onChange={e=>setNewJob(p=>({...p,service:e.target.value}))} style={S.sel}>{SERVICES.map(s=><option key={s.id} value={s.id}>{s.name} — {cur(s.rate)}</option>)}</select>]].map(([label,field])=>(
+                <div key={label}><label style={S.fLabel}>{label}</label>{field}</div>
+              ))}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><label style={S.fLabel}>Technician</label><select value={newJob.tech} onChange={e=>setNewJob(p=>({...p,tech:e.target.value}))} style={S.sel}><option value="robert">Robert Pellicci</option><option value="thomas">Thomas Pellicci</option></select></div>
+                <div><label style={S.fLabel}>Time</label><input type="time" value={newJob.time} onChange={e=>setNewJob(p=>({...p,time:e.target.value}))} style={S.sel}/></div>
+              </div>
+              <div><label style={S.fLabel}>Date</label><input type="date" value={newJob.date} onChange={e=>setNewJob(p=>({...p,date:e.target.value}))} style={S.sel}/></div>
+              <div><label style={S.fLabel}>Notes</label><input value={newJob.notes} onChange={e=>setNewJob(p=>({...p,notes:e.target.value}))} placeholder="e.g. 6 zones, gate code 1234" style={S.sel}/></div>
+              {newJob.date&&newJob.tech&&(
+                <div style={{background:"#060f1a",border:"1px solid #1e3a5f",borderRadius:8,padding:"8px 12px"}}>
+                  <div style={{fontSize:10,color:"#475569",marginBottom:4}}>{TECHS[newJob.tech].name} — {new Date(newJob.date+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"})}</div>
+                  {jobsForTechDate(newJob.tech,newJob.date).length===0?<div style={{fontSize:12,color:"#10b981"}}>✓ Fully available</div>:jobsForTechDate(newJob.tech,newJob.date).map(j=><div key={j.id} style={{fontSize:12,color:"#f59e0b"}}>⚠ {j.time} — {j.client}</div>)}
+                </div>
+              )}
+              <button onClick={()=>{if(!newJob.client)return;setJobs(p=>[...p,{...newJob,id:`j${Date.now()}`,status:"scheduled"}]);setShowJobModal(false);setNewJob({client:"",service:"startup",tech:"robert",date:fmtD(today),time:"09:00",notes:""}); }}
+                style={{padding:"11px 0",background:"#3b82f6",border:"none",borderRadius:9,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"'Barlow',sans-serif",cursor:"pointer",marginTop:4}}>
+                ✓ Confirm Booking
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AVAILABILITY MODAL */}
+      {showAvailModal&&(
+        <div style={S.modalOverlay} onClick={()=>setShowAvailModal(false)}>
+          <div style={S.modal} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
+              <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:"'Barlow Condensed',sans-serif"}}>Edit Working Hours</div>
+              <button onClick={()=>setShowAvailModal(false)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:18}}>✕</button>
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              {Object.entries(TECHS).map(([key,t])=>(
+                <button key={key} onClick={()=>setEditTech(key)} style={{flex:1,padding:"8px 0",background:editTech===key?"#1e3a5f":"#060f1a",border:`1px solid ${editTech===key?t.color:"#1e3a5f"}`,borderRadius:8,color:editTech===key?t.color:"#475569",cursor:"pointer",fontSize:12,fontFamily:"'Barlow',sans-serif"}}>
+                  {t.name.split(" ")[0]}
+                </button>
+              ))}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[["Start Time","start"],["End Time","end"]].map(([label,key])=>(
+                  <div key={key}><label style={S.fLabel}>{label}</label><input type="time" value={avail[editTech][key]} onChange={e=>setAvail(p=>({...p,[editTech]:{...p[editTech],[key]:e.target.value}}))} style={S.sel}/></div>
+                ))}
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:12,color:"#94a3b8"}}>
+                <input type="checkbox" checked={avail[editTech].lunch} onChange={e=>setAvail(p=>({...p,[editTech]:{...p[editTech],lunch:e.target.checked}}))}/>
+                Block 12pm–1pm lunch break
+              </label>
+              <button onClick={()=>setShowAvailModal(false)} style={{padding:"11px 0",background:TECHS[editTech].color,border:"none",borderRadius:9,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"'Barlow',sans-serif",cursor:"pointer",marginTop:4}}>
+                ✓ Save Hours
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
