@@ -295,18 +295,21 @@ function App(){
     const history=[...aiChats,{role:"user",content:msg}];
     setAiChats(history);
     try{
-      const res=await fetch("https://triflow-proxy.onrender.com",{
+      const res=await fetch("/api/chat",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:AI_SYSTEM,messages:history.map(m=>({role:m.role,content:m.content}))}),
       });
       const data=await res.json();
-      const reply=data.content?.[0]?.text||"No response.";
+      const reply=data.content?.[0]?.text||data.error?.message||JSON.stringify(data);
       setAiChats([...history,{role:"assistant",content:reply}]);
-      // Try to parse a quote from the response
       const parsed=parseQuoteFromAI(reply,msg);
       if(parsed)setAiQuote(parsed);
-    }catch(err){setAiChats([...history,{role:"assistant",content:"Error: "+err.message}]);}
+    }catch(err){
+      setAiChats([...history,{role:"assistant",content:"Error: "+err.message}]);
+    }finally{
+      setAiLoading(false);
+    }
   };
 
   const lowStock=inventory.filter(i=>i.qty<=i.reorder);
