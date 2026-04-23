@@ -239,6 +239,7 @@ function App(){
   const [aiChats,setAiChats]=useState([]);
   const [aiInput,setAiInput]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
+  const [aiQuote,setAiQuote]=useState(null); // stores parsed quote from AI response
   const chatEnd=useRef(null);
 
   useEffect(()=>save("jobs",jobs),[jobs]);
@@ -260,9 +261,36 @@ function App(){
   const invTotal=subtotal+subtotal*TAX;
   const invNum=`INV${String(Date.now()).slice(-5)}`;
 
+  const parseQuoteFromAI=(text,userMsg)=>{
+    // Detect if response contains a quote (has dollar amounts and Total)
+    if(!text.includes("Total:")&&!text.includes("TOTAL:"))return null;
+    // Try to extract client name from user message or AI response
+    let clientName="";
+    CLIENTS.forEach(c=>{if(userMsg.toLowerCase().includes(c.name.toLowerCase())||text.toLowerCase().includes(c.name.toLowerCase()))clientName=c.name;});
+    const client=CLIENTS.find(c=>c.name===clientName);
+    // Extract line items — look for lines with $ amounts
+    const lines=[];
+    text.split("\n").forEach(line=>{
+      const match=line.match(/([A-Za-z\s"\/0-9]+?)[\s·:]+\$?([\d,]+\.?\d*)/);
+      if(match&&!line.toLowerCase().includes("subtotal")&&!line.toLowerCase().includes("total")&&!line.toLowerCase().includes("tax")){
+        const name=match[1].trim().replace(/^[-•*]\s*/,"");
+        const rate=parseFloat(match[2].replace(",",""));
+        if(rate>0&&rate<5000&&name.length>3){
+          // Try to match to a service
+          const svc=SERVICES.find(s=>s.name.toLowerCase().includes(name.toLowerCase().slice(0,8))||name.toLowerCase().includes(s.name.toLowerCase().slice(0,8)));
+          lines.push({id:Date.now()+Math.random(),name:svc?svc.name:name,qty:1,rate:svc?svc.rate:rate});
+        }
+      }
+    });
+    if(lines.length===0)return null;
+    // Remove duplicates
+    const unique=lines.filter((l,i)=>lines.findIndex(x=>x.name===l.name)===i);
+    return{client:clientName,clientObj:client,lines:unique,rawText:text,quoteNum:`QTE${String(Date.now()).slice(-5)}`};
+  };
+
   const sendAI=async text=>{
     const msg=text||aiInput.trim();if(!msg||aiLoading)return;
-    setAiInput("");setAiLoading(true);
+    setAiInput("");setAiLoading(true);setAiQuote(null);
     const history=[...aiChats,{role:"user",content:msg}];
     setAiChats(history);
     try{
@@ -272,8 +300,12 @@ function App(){
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:AI_SYSTEM,messages:history.map(m=>({role:m.role,content:m.content}))}),
       });
       const data=await res.json();
-      setAiChats([...history,{role:"assistant",content:data.content?.[0]?.text||"No response."}]);
-    }catch{setAiChats([...history,{role:"assistant",content:"Connection error. Check your API key in the app settings."}]);}
+      const reply=data.content?.[0]?.text||"No response.";
+      setAiChats([...history,{role:"assistant",content:reply}]);
+      // Try to parse a quote from the response
+      const parsed=parseQuoteFromAI(reply,msg);
+      if(parsed)setAiQuote(parsed);
+    }catch{setAiChats([...history,{role:"assistant",content:"Connection error. Check your API key."}]);}
     setAiLoading(false);
   };
 
@@ -831,9 +863,16 @@ function App(){
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"30px 20px",gap:10}}>
                     <div style={{fontSize:34}}>🤖</div>
                     <div style={{fontSize:16,fontWeight:700,color:"#ef4444",fontFamily:"'Barlow Condensed',sans-serif"}}>T&R AI Assistant</div>
-                    <div style={{fontSize:12,color:"#334155",textAlign:"center"}}>Real pricing, 49 clients & hydraulic design loaded</div>
+                    <div style={{fontSize:12,color:"#334155",textAlign:"center"}}>Ask for a quote — it will auto-detect line items and let you email or convert to invoice</div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginTop:8,maxWidth:540}}>
-                      {["Diagnose: one zone won't turn on","Quote startup for Danny O'Sullivan — 8 zones","Design system: new client in Manorville","Route Manorville clients for Monday","Winterization checklist for Long Island","1\" line break — what materials do I need?"].map((q,i)=>(
+                      {[
+                        "Quote startup for Danny O'Sullivan — 8 zones",
+                        "Quote: startup + 2 spray heads + 1\" line break for Rolando",
+                        "Quote new 7-zone install in Manorville",
+                        "Quote winterization for Gary Dubovick",
+                        "Diagnose: one zone won't turn on",
+                        "Design system: 80 psi, 3/4\" meter, 10 GPM, 1/3 acre",
+                      ].map((q,i)=>(
                         <button key={i} onClick={()=>sendAI(q)} style={{padding:"9px 13px",background:"#0c1a2e",border:"1px solid #0c2040",borderRadius:7,color:"#475569",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"'Barlow',sans-serif",lineHeight:1.4}}>{q}</button>
                       ))}
                     </div>
@@ -858,8 +897,104 @@ function App(){
                 )}
                 <div ref={chatEnd}/>
               </div>
+
+              {/* QUOTE ACTION PANEL — appears when AI generates a quote */}
+              {aiQuote&&(
+                <div style={{margin:"0 18px 12px",background:"#0c1a2e",border:"2px solid #10b981",borderRadius:12,padding:14,animation:"slideIn 0.2s ease"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:"#10b981"}}/>
+                    <span style={{fontSize:12,fontWeight:700,color:"#10b981",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:"0.05em"}}>QUOTE DETECTED — {aiQuote.quoteNum}</span>
+                    {aiQuote.client&&<span style={{fontSize:11,color:"#475569"}}>· {aiQuote.client}</span>}
+                    <button onClick={()=>setAiQuote(null)} style={{marginLeft:"auto",background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:14}}>✕</button>
+                  </div>
+
+                  {/* Quote line items preview */}
+                  <div style={{background:"#060f1a",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+                    <div style={{fontSize:9,color:"#1e3a5f",fontFamily:"'JetBrains Mono',monospace",marginBottom:6}}>T&R IRRIGATION LLC · 678 Route 25A, Rocky Point NY 11778 · (631) 494-2813</div>
+                    {aiQuote.client&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Quote for: <strong style={{color:"#e2e8f0"}}>{aiQuote.client}</strong>{aiQuote.clientObj&&<span style={{color:"#475569"}}> · {aiQuote.clientObj.address}, {aiQuote.clientObj.city}</span>}</div>}
+                    {aiQuote.lines.map((l,i)=>(
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #0c2040"}}>
+                        <span style={{color:"#94a3b8"}}>{l.name} × {l.qty}</span>
+                        <span style={{color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{cur(l.qty*l.rate)}</span>
+                      </div>
+                    ))}
+                    {(()=>{
+                      const sub=aiQuote.lines.reduce((s,l)=>s+l.qty*l.rate,0);
+                      const tax=sub*TAX;
+                      const total=sub+tax;
+                      return(
+                        <div style={{marginTop:8}}>
+                          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#475569",marginBottom:2}}><span>Subtotal</span><span style={{fontFamily:"'JetBrains Mono',monospace"}}>{cur(sub)}</span></div>
+                          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#475569",marginBottom:4}}><span>Tax (8.75%)</span><span style={{fontFamily:"'JetBrains Mono',monospace"}}>{cur(tax)}</span></div>
+                          <div style={{display:"flex",justifyContent:"space-between",fontSize:14,fontWeight:700,color:"#10b981",borderTop:"1px solid #1e3a5f",paddingTop:6}}><span>Total</span><span style={{fontFamily:"'JetBrains Mono',monospace"}}>{cur(total)}</span></div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                    {/* Email Quote */}
+                    <button onClick={()=>{
+                      const sub=aiQuote.lines.reduce((s,l)=>s+l.qty*l.rate,0);
+                      const tax=sub*TAX;
+                      const total=sub+tax;
+                      const client=aiQuote.clientObj;
+                      const toEmail=client?.email||"";
+                      const subject=encodeURIComponent(`T&R Irrigation LLC — Quote ${aiQuote.quoteNum}`);
+                      const lineItems=aiQuote.lines.map(l=>`  ${l.name} x${l.qty}: ${cur(l.qty*l.rate)}`).join("\n");
+                      const body=encodeURIComponent(
+`Dear ${aiQuote.client||"Customer"},
+
+Please find your quote from T&R Irrigation LLC below.
+
+Quote #: ${aiQuote.quoteNum}
+Date: ${new Date().toLocaleDateString()}
+
+${lineItems}
+
+Subtotal: ${cur(sub)}
+Tax (8.75%): ${cur(tax)}
+TOTAL: ${cur(total)}
+
+To accept this quote or schedule service, please call or text us at (631) 494-2813.
+
+Thank you,
+Robert & Thomas Pellicci
+T&R Irrigation LLC
+678 Route 25A, Rocky Point NY 11778
+T.R.irrigation27@gmail.com`
+                      );
+                      window.open(`mailto:${toEmail}?subject=${subject}&body=${body}`);
+                    }} style={{padding:"10px 6px",background:"#0c2040",border:"1px solid #3b82f6",borderRadius:8,color:"#60a5fa",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>
+                      📧 Email Quote
+                    </button>
+
+                    {/* Convert to Invoice */}
+                    <button onClick={()=>{
+                      setInvClient(aiQuote.client||"");
+                      setInvLines(aiQuote.lines.map(l=>({...l,id:Date.now()+Math.random()})));
+                      setInvSent(false);
+                      setActive("invoice");
+                      setAiQuote(null);
+                    }} style={{padding:"10px 6px",background:"#10b981",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>
+                      📋 Make Invoice
+                    </button>
+
+                    {/* Book Job from Quote */}
+                    <button onClick={()=>{
+                      if(aiQuote.client)setNewJob(p=>({...p,client:aiQuote.client,service:aiQuote.lines[0]?.svcId||"startup"}));
+                      setShowJobModal(true);
+                      setAiQuote(null);
+                    }} style={{padding:"10px 6px",background:"#0c2040",border:"1px solid #f59e0b",borderRadius:8,color:"#f59e0b",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>
+                      📅 Book Job
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div style={{display:"flex",gap:8,padding:"12px 18px",borderTop:"1px solid #0c2040"}}>
-                <textarea value={aiInput} onChange={e=>setAiInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAI();}}} placeholder="Ask about diagnosis, quoting, system design, routing..." rows={2}
+                <textarea value={aiInput} onChange={e=>setAiInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAI();}}} placeholder="Ask for a quote, diagnosis, system design, or routing..." rows={2}
                   style={{flex:1,background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:9,color:"#e2e8f0",padding:"10px 13px",fontSize:13,fontFamily:"'Barlow',sans-serif",resize:"none",lineHeight:1.5}}/>
                 <button onClick={()=>sendAI()} disabled={aiLoading||!aiInput.trim()}
                   style={{width:42,borderRadius:9,border:"none",color:"#fff",fontSize:19,background:aiLoading||!aiInput.trim()?"#1e293b":"#ef4444",cursor:aiLoading||!aiInput.trim()?"not-allowed":"pointer"}}>↑</button>
@@ -867,6 +1002,7 @@ function App(){
               <div style={{fontSize:10,color:"#0c2040",textAlign:"center",padding:"3px 0 7px",fontFamily:"'JetBrains Mono',monospace"}}>Enter to send · Shift+Enter for new line</div>
             </div>
           )}
+
         </div>
       </div>
 
