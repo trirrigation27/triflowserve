@@ -222,11 +222,10 @@ function App(){
   const [active,setActive]=useState("calendar");
   const [jobs,setJobs]=useState(()=>load("jobs",seedJobs()));
   const [inventory,setInventory]=useState(()=>load("inventory",INIT_INV));
-  const [calView,setCalView]=useState("today");
+  const [calView,setCalView]=useState("week");
   const [calDate,setCalDate]=useState(new Date());
   const [showJobModal,setShowJobModal]=useState(false);
   const [newJob,setNewJob]=useState({client:"",service:"startup",tech:"robert",date:fmtD(today),time:"09:00",notes:""});
-  const [selJob,setSelJob]=useState(null);
   const [avail,setAvail]=useState(()=>load("avail",{robert:{start:"08:00",end:"17:00",lunch:true},thomas:{start:"08:00",end:"17:00",lunch:true}}));
   const [showAvailModal,setShowAvailModal]=useState(false);
   const [editTech,setEditTech]=useState("robert");
@@ -239,7 +238,6 @@ function App(){
   const [aiChats,setAiChats]=useState([]);
   const [aiInput,setAiInput]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
-  const [aiQuote,setAiQuote]=useState(null); // stores parsed quote from AI response
   const chatEnd=useRef(null);
 
   useEffect(()=>save("jobs",jobs),[jobs]);
@@ -261,36 +259,9 @@ function App(){
   const invTotal=subtotal+subtotal*TAX;
   const invNum=`INV${String(Date.now()).slice(-5)}`;
 
-  const parseQuoteFromAI=(text,userMsg)=>{
-    // Detect if response contains a quote (has dollar amounts and Total)
-    if(!text.includes("Total:")&&!text.includes("TOTAL:"))return null;
-    // Try to extract client name from user message or AI response
-    let clientName="";
-    CLIENTS.forEach(c=>{if(userMsg.toLowerCase().includes(c.name.toLowerCase())||text.toLowerCase().includes(c.name.toLowerCase()))clientName=c.name;});
-    const client=CLIENTS.find(c=>c.name===clientName);
-    // Extract line items — look for lines with $ amounts
-    const lines=[];
-    text.split("\n").forEach(line=>{
-      const match=line.match(/([A-Za-z\s"\/0-9]+?)[\s·:]+\$?([\d,]+\.?\d*)/);
-      if(match&&!line.toLowerCase().includes("subtotal")&&!line.toLowerCase().includes("total")&&!line.toLowerCase().includes("tax")){
-        const name=match[1].trim().replace(/^[-•*]\s*/,"");
-        const rate=parseFloat(match[2].replace(",",""));
-        if(rate>0&&rate<5000&&name.length>3){
-          // Try to match to a service
-          const svc=SERVICES.find(s=>s.name.toLowerCase().includes(name.toLowerCase().slice(0,8))||name.toLowerCase().includes(s.name.toLowerCase().slice(0,8)));
-          lines.push({id:Date.now()+Math.random(),name:svc?svc.name:name,qty:1,rate:svc?svc.rate:rate});
-        }
-      }
-    });
-    if(lines.length===0)return null;
-    // Remove duplicates
-    const unique=lines.filter((l,i)=>lines.findIndex(x=>x.name===l.name)===i);
-    return{client:clientName,clientObj:client,lines:unique,rawText:text,quoteNum:`QTE${String(Date.now()).slice(-5)}`};
-  };
-
   const sendAI=async text=>{
     const msg=text||aiInput.trim();if(!msg||aiLoading)return;
-    setAiInput("");setAiLoading(true);setAiQuote(null);
+    setAiInput("");setAiLoading(true);
     const history=[...aiChats,{role:"user",content:msg}];
     setAiChats(history);
     try{
@@ -300,12 +271,8 @@ function App(){
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:AI_SYSTEM,messages:history.map(m=>({role:m.role,content:m.content}))}),
       });
       const data=await res.json();
-      const reply=data.content?.[0]?.text||"No response.";
-      setAiChats([...history,{role:"assistant",content:reply}]);
-      // Try to parse a quote from the response
-      const parsed=parseQuoteFromAI(reply,msg);
-      if(parsed)setAiQuote(parsed);
-    }catch{setAiChats([...history,{role:"assistant",content:"Connection error. Check your API key."}]);}
+      setAiChats([...history,{role:"assistant",content:data.content?.[0]?.text||"No response."}]);
+    }catch{setAiChats([...history,{role:"assistant",content:"Connection error. Check your API key in the app settings."}]);}
     setAiLoading(false);
   };
 
@@ -403,116 +370,19 @@ function App(){
           {/* CALENDAR */}
           {active==="calendar"&&(
             <div style={S.scroll}>
-              {/* Cal controls */}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 18px",borderBottom:"1px solid #0c2040",gap:8,flexWrap:"wrap"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 18px",borderBottom:"1px solid #0c2040",gap:10}}>
                 <div style={{display:"flex",gap:6}}>
-                  <button onClick={()=>{const d=new Date(calDate);d.setDate(d.getDate()-(calView==="week"?7:1));setCalDate(d);}} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:13,cursor:"pointer"}}>‹</button>
-                  <button onClick={()=>setCalDate(new Date())} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:12,cursor:"pointer"}}>Today</button>
-                  <button onClick={()=>{const d=new Date(calDate);d.setDate(d.getDate()+(calView==="week"?7:1));setCalDate(d);}} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:13,cursor:"pointer"}}>›</button>
+                  <button onClick={()=>{const d=new Date(calDate);d.setDate(d.getDate()-7);setCalDate(d);}} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:13,cursor:"pointer"}}>‹</button>
+                  <button onClick={()=>setCalDate(new Date())} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:13,cursor:"pointer"}}>Today</button>
+                  <button onClick={()=>{const d=new Date(calDate);d.setDate(d.getDate()+7);setCalDate(d);}} style={{padding:"5px 12px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:13,cursor:"pointer"}}>›</button>
                 </div>
-                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14,color:"#e2e8f0"}}>
-                  {calView==="today"?calDate.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}):calDate.toLocaleDateString("en-US",{month:"long",year:"numeric"})}
-                </div>
+                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,color:"#e2e8f0"}}>{calDate.toLocaleDateString("en-US",{month:"long",year:"numeric"})}</div>
                 <div style={{display:"flex",gap:6}}>
-                  {["today","week","employee"].map(v=>(
-                    <button key={v} onClick={()=>setCalView(v)} style={{padding:"5px 10px",background:calView===v?"#1e3a5f":"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:6,color:calView===v?"#60a5fa":"#475569",fontSize:11,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace"}}>
-                      {v==="employee"?"By Tech":v==="today"?"Day":"Week"}
-                    </button>
+                  {["week","employee"].map(v=>(
+                    <button key={v} onClick={()=>setCalView(v)} style={{padding:"5px 12px",background:calView===v?"#1e3a5f":"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:6,color:calView===v?"#60a5fa":"#475569",fontSize:11,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace"}}>{v==="employee"?"By Tech":"Week"}</button>
                   ))}
                 </div>
               </div>
-
-              {/* STATUS LEGEND */}
-              <div style={{display:"flex",gap:12,padding:"8px 18px",borderBottom:"1px solid #0c2040",background:"#07111f"}}>
-                {[["🔵","Scheduled","#1e3a5f"],["🟡","En Route","#92400e"],["🟢","Complete","#166534"],["🔴","Needs Follow-up","#7f1d1d"]].map(([dot,label,bg])=>(
-                  <div key={label} style={{display:"flex",alignItems:"center",gap:4}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:bg,border:`1px solid ${bg}`}}/>
-                    <span style={{fontSize:10,color:"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{label}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* TODAY VIEW */}
-              {calView==="today"&&(()=>{
-                const ds=fmtD(calDate);
-                const dayJobs=jobsForDate(ds).sort((a,b)=>a.time.localeCompare(b.time));
-                const robertJobs=dayJobs.filter(j=>j.tech==="robert");
-                const thomasJobs=dayJobs.filter(j=>j.tech==="thomas");
-                const statusColor=s=>s==="complete"?"#166534":s==="enroute"?"#92400e":s==="followup"?"#7f1d1d":"#1e3a5f";
-                const statusBg=s=>s==="complete"?"#0d1f0d":s==="enroute"?"#1c0f00":s==="followup"?"#200000":"#0c1a2e";
-                const statusLabel=s=>s==="complete"?"✓ Complete":s==="enroute"?"→ En Route":s==="followup"?"! Follow-up":"● Scheduled";
-                const cycleStatus=job=>{
-                  const order=["scheduled","enroute","complete","followup"];
-                  const next=order[(order.indexOf(job.status||"scheduled")+1)%order.length];
-                  setJobs(p=>p.map(j=>j.id===job.id?{...j,status:next}:j));
-                };
-                const makeGCalLink=job=>{
-                  const client=CLIENTS.find(c=>c.name===job.client);
-                  const svc=SERVICES.find(s=>s.id===job.service);
-                  const addr=client?`${client.address}, ${client.city} NY ${client.zip}`:"";
-                  const start=`${ds.replace(/-/g,"")}T${job.time.replace(":","")}00`;
-                  const endH=String(parseInt(job.time.split(":")[0])+(svc?.duration?Math.ceil(svc.duration/60):1)).padStart(2,"0");
-                  const end=`${ds.replace(/-/g,"")}T${endH}${job.time.split(":")[1]}00`;
-                  const title=encodeURIComponent(`T&R Irrigation — ${job.client} — ${svc?.name||""}`);
-                  const details=encodeURIComponent(`Tech: ${TECHS[job.tech].name}\nService: ${svc?.name}\nNotes: ${job.notes||"none"}`);
-                  const loc=encodeURIComponent(addr);
-                  return`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${loc}`;
-                };
-                const renderJobCard=job=>{
-                  const svc=SERVICES.find(s=>s.id===job.service);
-                  const tech=TECHS[job.tech];
-                  const sc=statusColor(job.status||"scheduled");
-                  const sb=statusBg(job.status||"scheduled");
-                  return(
-                    <div key={job.id} style={{background:sb,border:`1px solid ${sc}`,borderRadius:10,padding:"12px 14px",marginBottom:8}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                        <div style={{flex:1}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                            <span style={{fontSize:11,color:tech.color,fontFamily:"'JetBrains Mono',monospace",fontWeight:600}}>{job.time}</span>
-                            <span style={{fontSize:10,padding:"2px 7px",background:sc,borderRadius:10,color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{statusLabel(job.status||"scheduled")}</span>
-                          </div>
-                          <div style={{fontSize:14,fontWeight:700,color:"#e2e8f0",marginBottom:2}}>{job.client}</div>
-                          <div style={{fontSize:12,color:"#64748b"}}>{svc?.name} · {cur(svc?.rate||0)}</div>
-                          {job.notes&&<div style={{fontSize:11,color:"#475569",marginTop:4,fontStyle:"italic"}}>📝 {job.notes}</div>}
-                        </div>
-                        <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
-                          <button onClick={()=>cycleStatus(job)} style={{padding:"4px 10px",background:sc,border:"none",borderRadius:6,color:"#fff",fontSize:10,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace",whiteSpace:"nowrap"}}>
-                            Next Status ›
-                          </button>
-                          <a href={makeGCalLink(job)} target="_blank" rel="noreferrer" style={{padding:"4px 10px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#60a5fa",fontSize:10,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace",textDecoration:"none",whiteSpace:"nowrap"}}>
-                            + Google Cal
-                          </a>
-                          <button onClick={()=>setSelJob(job)} style={{padding:"4px 10px",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:6,color:"#94a3b8",fontSize:10,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace"}}>
-                            Edit ✎
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                };
-                return(
-                  <div style={{padding:"14px 18px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,paddingBottom:8,borderBottom:"1px solid #0c2040"}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:"#3b82f6"}}/>
-                        <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,color:"#3b82f6"}}>Robert Pellicci</span>
-                        <span style={{fontSize:10,color:"#334155",fontFamily:"'JetBrains Mono',monospace"}}>{robertJobs.length} job{robertJobs.length!==1?"s":""}</span>
-                      </div>
-                      {robertJobs.length===0?<div style={{fontSize:12,color:"#1e3a5f",padding:"20px 0",textAlign:"center",border:"1px dashed #1e3a5f",borderRadius:8}}>No jobs scheduled</div>:robertJobs.map(renderJobCard)}
-                    </div>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,paddingBottom:8,borderBottom:"1px solid #0c2040"}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:"#10b981"}}/>
-                        <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:15,color:"#10b981"}}>Thomas Pellicci</span>
-                        <span style={{fontSize:10,color:"#334155",fontFamily:"'JetBrains Mono',monospace"}}>{thomasJobs.length} job{thomasJobs.length!==1?"s":""}</span>
-                      </div>
-                      {thomasJobs.length===0?<div style={{fontSize:12,color:"#1e3a5f",padding:"20px 0",textAlign:"center",border:"1px dashed #1e3a5f",borderRadius:8}}>No jobs scheduled</div>:thomasJobs.map(renderJobCard)}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* WEEK VIEW */}
               {calView==="week"&&(
                 <div style={{overflowX:"auto"}}>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(110px,1fr))",minWidth:700}}>
@@ -520,19 +390,18 @@ function App(){
                       const ds=fmtD(d),isToday=ds===fmtD(new Date());
                       return(
                         <div key={i} style={{borderRight:"1px solid #0c2040",minHeight:300,borderTop:isToday?"2px solid #3b82f6":"2px solid transparent"}}>
-                          <div style={{padding:"8px 8px 6px",borderBottom:"1px solid #0c2040",background:"#07111f",textAlign:"center",cursor:"pointer"}} onClick={()=>{setCalDate(d);setCalView("today");}}>
+                          <div style={{padding:"8px 8px 6px",borderBottom:"1px solid #0c2040",background:"#07111f",textAlign:"center"}}>
                             <div style={{fontSize:10,color:isToday?"#3b82f6":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{d.toLocaleDateString("en-US",{weekday:"short"})}</div>
                             <div style={{fontSize:18,fontWeight:700,color:isToday?"#3b82f6":"#94a3b8",fontFamily:"'Barlow Condensed',sans-serif"}}>{d.getDate()}</div>
                           </div>
                           <div style={{padding:"6px 5px",display:"flex",flexDirection:"column",gap:4}}>
                             {jobsForDate(ds).map(job=>{
                               const svc=SERVICES.find(s=>s.id===job.service),tech=TECHS[job.tech];
-                              const sc=job.status==="complete"?"#166534":job.status==="enroute"?"#92400e":job.status==="followup"?"#7f1d1d":"#1e3a5f";
                               return(
-                                <div key={job.id} onClick={()=>{setCalDate(d);setCalView("today");}} style={{padding:"5px 7px",borderRadius:7,borderLeft:`3px solid ${tech.color}`,background:sc,cursor:"pointer"}}>
-                                  <div style={{fontSize:9,color:"#94a3b8",fontFamily:"'JetBrains Mono',monospace"}}>{job.time}</div>
-                                  <div style={{fontSize:11,fontWeight:600,color:"#e2e8f0",lineHeight:1.2}}>{job.client}</div>
-                                  <div style={{fontSize:10,color:"#64748b"}}>{svc?.name}</div>
+                                <div key={job.id} style={{padding:"5px 7px",borderRadius:7,borderLeft:`3px solid ${tech.color}`,background:job.status==="complete"?"#0d1f0d":"#0c1a2e"}}>
+                                  <div style={{fontSize:9,color:"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{job.time}</div>
+                                  <div style={{fontSize:11,fontWeight:600,color:job.status==="complete"?"#4ade80":"#e2e8f0",lineHeight:1.2}}>{job.client}</div>
+                                  <div style={{fontSize:10,color:"#475569"}}>{svc?.name}</div>
                                   <div style={{fontSize:9,color:tech.color,marginTop:1}}>{tech.name.split(" ")[0]}</div>
                                 </div>
                               );
@@ -544,8 +413,6 @@ function App(){
                   </div>
                 </div>
               )}
-
-              {/* BY TECH VIEW */}
               {calView==="employee"&&(
                 <div style={{overflowX:"auto"}}>
                   <div style={{display:"grid",gridTemplateColumns:"70px 1fr 1fr",minWidth:480}}>
@@ -562,7 +429,7 @@ function App(){
                     {weekDates.map((d,i)=>{
                       const ds=fmtD(d),isToday=ds===fmtD(new Date());
                       return[
-                        <div key={`l${i}`} onClick={()=>{setCalDate(d);setCalView("today");}} style={{padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #0c2040",borderRight:"1px solid #0c2040",background:"#07111f",cursor:"pointer"}}>
+                        <div key={`l${i}`} style={{padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #0c2040",borderRight:"1px solid #0c2040",background:"#07111f"}}>
                           <div style={{fontSize:9,color:isToday?"#3b82f6":"#475569",fontFamily:"'JetBrains Mono',monospace"}}>{d.toLocaleDateString("en-US",{weekday:"short"})}</div>
                           <div style={{fontSize:16,fontWeight:700,color:isToday?"#3b82f6":"#64748b",fontFamily:"'Barlow Condensed',sans-serif"}}>{d.getDate()}</div>
                         </div>,
@@ -570,9 +437,8 @@ function App(){
                           <div key={`${tk}${i}`} style={{padding:"6px 8px",borderBottom:"1px solid #0c2040",borderLeft:"1px solid #0c2040",minHeight:70,display:"flex",flexDirection:"column",gap:4}}>
                             {jobsForTechDate(tk,ds).map(job=>{
                               const svc=SERVICES.find(s=>s.id===job.service);
-                              const sc=job.status==="complete"?"#166534":job.status==="enroute"?"#92400e":job.status==="followup"?"#7f1d1d":"#0c2040";
                               return(
-                                <div key={job.id} onClick={()=>{setCalDate(d);setCalView("today");}} style={{padding:"4px 8px",borderRadius:6,background:sc,border:`1px solid ${TECHS[tk].color}33`,display:"flex",flexDirection:"column",gap:1,cursor:"pointer"}}>
+                                <div key={job.id} style={{padding:"4px 8px",borderRadius:6,background:job.status==="complete"?"#0d1f0d":"#0c2040",border:`1px solid ${TECHS[tk].color}33`,display:"flex",flexDirection:"column",gap:1}}>
                                   <span style={{fontSize:9,color:TECHS[tk].color,fontFamily:"'JetBrains Mono',monospace"}}>{job.time}</span>
                                   <span style={{fontSize:11,color:"#e2e8f0",fontWeight:600}}>{job.client}</span>
                                   <span style={{fontSize:10,color:"#475569"}}>{svc?.name}</span>
@@ -863,16 +729,9 @@ function App(){
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"30px 20px",gap:10}}>
                     <div style={{fontSize:34}}>🤖</div>
                     <div style={{fontSize:16,fontWeight:700,color:"#ef4444",fontFamily:"'Barlow Condensed',sans-serif"}}>T&R AI Assistant</div>
-                    <div style={{fontSize:12,color:"#334155",textAlign:"center"}}>Ask for a quote — it will auto-detect line items and let you email or convert to invoice</div>
+                    <div style={{fontSize:12,color:"#334155",textAlign:"center"}}>Real pricing, 49 clients & hydraulic design loaded</div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginTop:8,maxWidth:540}}>
-                      {[
-                        "Quote startup for Danny O'Sullivan — 8 zones",
-                        "Quote: startup + 2 spray heads + 1\" line break for Rolando",
-                        "Quote new 7-zone install in Manorville",
-                        "Quote winterization for Gary Dubovick",
-                        "Diagnose: one zone won't turn on",
-                        "Design system: 80 psi, 3/4\" meter, 10 GPM, 1/3 acre",
-                      ].map((q,i)=>(
+                      {["Diagnose: one zone won't turn on","Quote startup for Danny O'Sullivan — 8 zones","Design system: new client in Manorville","Route Manorville clients for Monday","Winterization checklist for Long Island","1\" line break — what materials do I need?"].map((q,i)=>(
                         <button key={i} onClick={()=>sendAI(q)} style={{padding:"9px 13px",background:"#0c1a2e",border:"1px solid #0c2040",borderRadius:7,color:"#475569",fontSize:12,cursor:"pointer",textAlign:"left",fontFamily:"'Barlow',sans-serif",lineHeight:1.4}}>{q}</button>
                       ))}
                     </div>
@@ -897,104 +756,8 @@ function App(){
                 )}
                 <div ref={chatEnd}/>
               </div>
-
-              {/* QUOTE ACTION PANEL — appears when AI generates a quote */}
-              {aiQuote&&(
-                <div style={{margin:"0 18px 12px",background:"#0c1a2e",border:"2px solid #10b981",borderRadius:12,padding:14,animation:"slideIn 0.2s ease"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:"#10b981"}}/>
-                    <span style={{fontSize:12,fontWeight:700,color:"#10b981",fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:"0.05em"}}>QUOTE DETECTED — {aiQuote.quoteNum}</span>
-                    {aiQuote.client&&<span style={{fontSize:11,color:"#475569"}}>· {aiQuote.client}</span>}
-                    <button onClick={()=>setAiQuote(null)} style={{marginLeft:"auto",background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:14}}>✕</button>
-                  </div>
-
-                  {/* Quote line items preview */}
-                  <div style={{background:"#060f1a",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
-                    <div style={{fontSize:9,color:"#1e3a5f",fontFamily:"'JetBrains Mono',monospace",marginBottom:6}}>T&R IRRIGATION LLC · 678 Route 25A, Rocky Point NY 11778 · (631) 494-2813</div>
-                    {aiQuote.client&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Quote for: <strong style={{color:"#e2e8f0"}}>{aiQuote.client}</strong>{aiQuote.clientObj&&<span style={{color:"#475569"}}> · {aiQuote.clientObj.address}, {aiQuote.clientObj.city}</span>}</div>}
-                    {aiQuote.lines.map((l,i)=>(
-                      <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #0c2040"}}>
-                        <span style={{color:"#94a3b8"}}>{l.name} × {l.qty}</span>
-                        <span style={{color:"#e2e8f0",fontFamily:"'JetBrains Mono',monospace"}}>{cur(l.qty*l.rate)}</span>
-                      </div>
-                    ))}
-                    {(()=>{
-                      const sub=aiQuote.lines.reduce((s,l)=>s+l.qty*l.rate,0);
-                      const tax=sub*TAX;
-                      const total=sub+tax;
-                      return(
-                        <div style={{marginTop:8}}>
-                          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#475569",marginBottom:2}}><span>Subtotal</span><span style={{fontFamily:"'JetBrains Mono',monospace"}}>{cur(sub)}</span></div>
-                          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#475569",marginBottom:4}}><span>Tax (8.75%)</span><span style={{fontFamily:"'JetBrains Mono',monospace"}}>{cur(tax)}</span></div>
-                          <div style={{display:"flex",justifyContent:"space-between",fontSize:14,fontWeight:700,color:"#10b981",borderTop:"1px solid #1e3a5f",paddingTop:6}}><span>Total</span><span style={{fontFamily:"'JetBrains Mono',monospace"}}>{cur(total)}</span></div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Action buttons */}
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                    {/* Email Quote */}
-                    <button onClick={()=>{
-                      const sub=aiQuote.lines.reduce((s,l)=>s+l.qty*l.rate,0);
-                      const tax=sub*TAX;
-                      const total=sub+tax;
-                      const client=aiQuote.clientObj;
-                      const toEmail=client?.email||"";
-                      const subject=encodeURIComponent(`T&R Irrigation LLC — Quote ${aiQuote.quoteNum}`);
-                      const lineItems=aiQuote.lines.map(l=>`  ${l.name} x${l.qty}: ${cur(l.qty*l.rate)}`).join("\n");
-                      const body=encodeURIComponent(
-`Dear ${aiQuote.client||"Customer"},
-
-Please find your quote from T&R Irrigation LLC below.
-
-Quote #: ${aiQuote.quoteNum}
-Date: ${new Date().toLocaleDateString()}
-
-${lineItems}
-
-Subtotal: ${cur(sub)}
-Tax (8.75%): ${cur(tax)}
-TOTAL: ${cur(total)}
-
-To accept this quote or schedule service, please call or text us at (631) 494-2813.
-
-Thank you,
-Robert & Thomas Pellicci
-T&R Irrigation LLC
-678 Route 25A, Rocky Point NY 11778
-T.R.irrigation27@gmail.com`
-                      );
-                      window.open(`mailto:${toEmail}?subject=${subject}&body=${body}`);
-                    }} style={{padding:"10px 6px",background:"#0c2040",border:"1px solid #3b82f6",borderRadius:8,color:"#60a5fa",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>
-                      📧 Email Quote
-                    </button>
-
-                    {/* Convert to Invoice */}
-                    <button onClick={()=>{
-                      setInvClient(aiQuote.client||"");
-                      setInvLines(aiQuote.lines.map(l=>({...l,id:Date.now()+Math.random()})));
-                      setInvSent(false);
-                      setActive("invoice");
-                      setAiQuote(null);
-                    }} style={{padding:"10px 6px",background:"#10b981",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>
-                      📋 Make Invoice
-                    </button>
-
-                    {/* Book Job from Quote */}
-                    <button onClick={()=>{
-                      if(aiQuote.client)setNewJob(p=>({...p,client:aiQuote.client,service:aiQuote.lines[0]?.svcId||"startup"}));
-                      setShowJobModal(true);
-                      setAiQuote(null);
-                    }} style={{padding:"10px 6px",background:"#0c2040",border:"1px solid #f59e0b",borderRadius:8,color:"#f59e0b",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center"}}>
-                      📅 Book Job
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <div style={{display:"flex",gap:8,padding:"12px 18px",borderTop:"1px solid #0c2040"}}>
-                <textarea value={aiInput} onChange={e=>setAiInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAI();}}} placeholder="Ask for a quote, diagnosis, system design, or routing..." rows={2}
+                <textarea value={aiInput} onChange={e=>setAiInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAI();}}} placeholder="Ask about diagnosis, quoting, system design, routing..." rows={2}
                   style={{flex:1,background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:9,color:"#e2e8f0",padding:"10px 13px",fontSize:13,fontFamily:"'Barlow',sans-serif",resize:"none",lineHeight:1.5}}/>
                 <button onClick={()=>sendAI()} disabled={aiLoading||!aiInput.trim()}
                   style={{width:42,borderRadius:9,border:"none",color:"#fff",fontSize:19,background:aiLoading||!aiInput.trim()?"#1e293b":"#ef4444",cursor:aiLoading||!aiInput.trim()?"not-allowed":"pointer"}}>↑</button>
@@ -1002,7 +765,6 @@ T.R.irrigation27@gmail.com`
               <div style={{fontSize:10,color:"#0c2040",textAlign:"center",padding:"3px 0 7px",fontFamily:"'JetBrains Mono',monospace"}}>Enter to send · Shift+Enter for new line</div>
             </div>
           )}
-
         </div>
       </div>
 
@@ -1039,67 +801,7 @@ T.R.irrigation27@gmail.com`
         </div>
       )}
 
-      {/* JOB DETAIL / EDIT MODAL */}
-      {selJob&&(()=>{
-        const svc=SERVICES.find(s=>s.id===selJob.service);
-        const client=CLIENTS.find(c=>c.name===selJob.client);
-        const addr=client?`${client.address}, ${client.city} NY ${client.zip}`:"";
-        const ds=selJob.date;
-        const start=`${ds.replace(/-/g,"")}T${selJob.time.replace(":","")}00`;
-        const endH=String(parseInt(selJob.time.split(":")[0])+(svc?.duration?Math.ceil(svc.duration/60):1)).padStart(2,"0");
-        const end=`${ds.replace(/-/g,"")}T${endH}${selJob.time.split(":")[1]}00`;
-        const gcalUrl=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`T&R Irrigation — ${selJob.client} — ${svc?.name||""}`)}&dates=${start}/${end}&details=${encodeURIComponent(`Tech: ${TECHS[selJob.tech].name}\nService: ${svc?.name}\nNotes: ${selJob.notes||"none"}`)}&location=${encodeURIComponent(addr)}`;
-        const [editNotes,setEditNotes]=useState(selJob.notes||"");
-        return(
-          <div style={S.modalOverlay} onClick={()=>setSelJob(null)}>
-            <div style={S.modal} onClick={e=>e.stopPropagation()}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
-                <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0",fontFamily:"'Barlow Condensed',sans-serif"}}>Job Details</div>
-                <button onClick={()=>setSelJob(null)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:18}}>✕</button>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {[["Client",selJob.client],["Service",svc?.name],["Tech",TECHS[selJob.tech].name],["Date",new Date(selJob.date+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})],["Time",selJob.time],["Address",addr||"—"],["Rate",cur(svc?.rate||0)]].map(([l,v])=>(
-                  <div key={l} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-                    <span style={{fontSize:10,color:"#334155",width:60,flexShrink:0,fontFamily:"'JetBrains Mono',monospace",paddingTop:1}}>{l}</span>
-                    <span style={{fontSize:13,color:"#94a3b8"}}>{v}</span>
-                  </div>
-                ))}
-                <div>
-                  <label style={S.fLabel}>JOB NOTES / FOLLOW-UP</label>
-                  <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} rows={3} placeholder="Gate code, issues found, parts needed, follow-up required..."
-                    style={{width:"100%",background:"#060f1a",border:"1px solid #1e3a5f",borderRadius:8,color:"#e2e8f0",padding:"10px 12px",fontSize:12,fontFamily:"'JetBrains Mono',monospace",resize:"vertical",lineHeight:1.5}}/>
-                </div>
-                <div>
-                  <label style={S.fLabel}>JOB STATUS</label>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-                    {[["scheduled","● Scheduled","#1e3a5f"],["enroute","→ En Route","#92400e"],["complete","✓ Complete","#166534"],["followup","! Follow-up","#7f1d1d"]].map(([val,label,bg])=>(
-                      <button key={val} onClick={()=>setJobs(p=>p.map(j=>j.id===selJob.id?{...j,status:val}:j))}
-                        style={{padding:"8px 0",background:selJob.status===val?bg:"#060f1a",border:`1px solid ${bg}`,borderRadius:7,color:selJob.status===val?"#fff":"#64748b",fontSize:11,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace"}}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <a href={gcalUrl} target="_blank" rel="noreferrer"
-                  style={{display:"block",padding:"11px 0",background:"#0c2040",border:"1px solid #1e3a5f",borderRadius:9,color:"#60a5fa",fontSize:13,fontWeight:700,fontFamily:"'Barlow',sans-serif",textAlign:"center",textDecoration:"none"}}>
-                  📅 Add to Google Calendar
-                </a>
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>{setJobs(p=>p.map(j=>j.id===selJob.id?{...j,notes:editNotes,status:selJob.status}:j));setSelJob(null);}}
-                    style={{flex:2,padding:"11px 0",background:"#3b82f6",border:"none",borderRadius:9,color:"#fff",fontSize:13,fontWeight:700,fontFamily:"'Barlow',sans-serif",cursor:"pointer"}}>
-                    ✓ Save Changes
-                  </button>
-                  <button onClick={()=>{if(window.confirm("Delete this job?"))setJobs(p=>p.filter(j=>j.id!==selJob.id));setSelJob(null);}}
-                    style={{flex:1,padding:"11px 0",background:"#200000",border:"1px solid #7f1d1d",borderRadius:9,color:"#f87171",fontSize:13,fontFamily:"'Barlow',sans-serif",cursor:"pointer"}}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
+      {/* AVAILABILITY MODAL */}
       {showAvailModal&&(
         <div style={S.modalOverlay} onClick={()=>setShowAvailModal(false)}>
           <div style={S.modal} onClick={e=>e.stopPropagation()}>
