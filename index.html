@@ -306,8 +306,7 @@ function App(){
       // Try to parse a quote from the response
       const parsed=parseQuoteFromAI(reply,msg);
       if(parsed)setAiQuote(parsed);
-    }catch{setAiChats([...history,{role:"assistant",content:"Connection error. Check your API key."}]);}
-    setAiLoading(false);
+    }catch(err){setAiChats([...history,{role:"assistant",content:"Error: "+err.message}]);}
   };
 
   const lowStock=inventory.filter(i=>i.qty<=i.reorder);
