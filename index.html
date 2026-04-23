@@ -295,7 +295,7 @@ function App(){
     const history=[...aiChats,{role:"user",content:msg}];
     setAiChats(history);
     try{
-      const res=await fetch("/api/chat",{
+      const res=await fetch("https://triflow-proxy.t-r-irrigation27.workers.dev",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:AI_SYSTEM,messages:history.map(m=>({role:m.role,content:m.content}))}),
