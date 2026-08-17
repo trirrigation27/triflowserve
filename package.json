@@ -1,10 +1,11 @@
 {
-  "name": "triflow-proxy",
+  "name": "triflow-serve",
   "version": "1.0.0",
-  "description": "T&R Irrigation AI Proxy Server",
+  "description": "T&R Irrigation LLC Operations Platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy": "node deploy.js"
   },
   "engines": {
     "node": "24.x"
