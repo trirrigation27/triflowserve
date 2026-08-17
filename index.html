@@ -301,23 +301,15 @@ function App(){
         body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:1000,system:AI_SYSTEM,messages:history.slice(-6).map(m=>({role:m.role,content:m.content}))}),
       });
       const text=await res.text();
+      console.log("Raw response length:", text.length, "status:", res.status);
       if(!text||text.trim()===""){
-        setAiChats([...history,{role:"assistant",content:"Empty response. Please try again."}]);
+        setAiChats([...history,{role:"assistant",content:"Empty response from server. Please try again."}]);
         return;
       }
       let data;
       try{ data=JSON.parse(text); }
       catch(e){ setAiChats([...history,{role:"assistant",content:"Parse error: "+text.substring(0,200)}]); return; }
-      // Extract text from Anthropic response format
-      let reply="No response.";
-      if(data.content&&Array.isArray(data.content)){
-        const textBlock=data.content.find(b=>b.type==="text");
-        if(textBlock)reply=textBlock.text;
-      } else if(data.error){
-        reply="API Error: "+data.error.message;
-      } else {
-        reply=JSON.stringify(data);
-      }
+      const reply=data.content?.[0]?.text||data.error?.message||JSON.stringify(data);
       setAiChats([...history,{role:"assistant",content:reply}]);
       const parsed=parseQuoteFromAI(reply,msg);
       if(parsed)setAiQuote(parsed);
