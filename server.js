@@ -7,7 +7,6 @@ const PORT = process.env.PORT || 3000;
 
 const server = http.createServer((req, res) => {
 
-  // API proxy endpoint
   if (req.method === "POST" && req.url === "/api/chat") {
     const chunks = [];
     req.on("data", chunk => { chunks.push(chunk); });
@@ -16,7 +15,7 @@ const server = http.createServer((req, res) => {
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey) {
         res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "API key not configured" }));
+        res.end(JSON.stringify({ error: "API key not configured on server" }));
         return;
       }
       const options = {
@@ -34,18 +33,17 @@ const server = http.createServer((req, res) => {
         const responseChunks = [];
         proxyRes.on("data", chunk => { responseChunks.push(chunk); });
         proxyRes.on("end", () => {
-          const fullResponse = Buffer.concat(responseChunks).toString("utf8");
-          console.log("Anthropic status:", proxyRes.statusCode);
-          console.log("Response length:", fullResponse.length);
+          const fullResponse = Buffer.concat(responseChunks);
+          console.log("Anthropic status:", proxyRes.statusCode, "bytes:", fullResponse.length);
           res.writeHead(proxyRes.statusCode, {
             "Content-Type": "application/json",
-            "Content-Length": Buffer.byteLength(fullResponse, "utf8"),
+            "Content-Length": fullResponse.length,
           });
           res.end(fullResponse);
         });
       });
       proxyReq.on("error", err => {
-        console.error("Proxy error:", err.message);
+        console.error("Anthropic error:", err.message);
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: err.message }));
       });
@@ -55,19 +53,19 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Serve index.html for all other requests
   const filePath = path.join(__dirname, "index.html");
-  fs.readFile(filePath, (err, data) => {
+  fs.readFile(filePath, "utf8", (err, html) => {
     if (err) {
       res.writeHead(404);
       res.end("Not found");
       return;
     }
-    res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(data);
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(html);
   });
 });
 
 server.listen(PORT, () => {
   console.log(`TriFlow Serve running on port ${PORT}`);
+  console.log(`API key configured: ${process.env.ANTHROPIC_API_KEY ? "YES" : "NO"}`);
 });
